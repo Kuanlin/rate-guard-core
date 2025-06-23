@@ -150,7 +150,7 @@ impl SlidingWindowCounterCore {
     /// // Tick 35: window [6, 35], bucket 0 [0-9] expires
     /// assert_eq!(counter.try_acquire_at(30, 35), Ok(()));  // Only bucket 1 counts
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
@@ -183,13 +183,7 @@ impl SlidingWindowCounterCore {
         let window_start_tick = tick.saturating_sub(self.window_ticks());
 
         // Count tokens in all valid buckets within the sliding window
-        let mut total = 0;
-        for i in 0..(self.bucket_count as usize) {
-            // Only count buckets that fall within the sliding window
-            if state.bucket_start_ticks[i] >= window_start_tick && state.bucket_start_ticks[i] <= tick {
-                total += state.buckets[i];
-            }
-        }
+        let total = self.count_tokens_in_valid_buckets_within_sliding_window(&state, tick, window_start_tick);
 
         // Check if we can accommodate the requested tokens
         if total <= self.capacity.saturating_sub(tokens) {
@@ -199,5 +193,39 @@ impl SlidingWindowCounterCore {
         } else {
             Err(RateLimitError::ExceedsCapacity)
         }
+    }
+
+
+    /// Counts the total number of tokens currently present in valid buckets
+    /// within the sliding window defined by `window_start_tick` and `tick`.
+    ///
+    /// Only buckets whose start time falls within the inclusive range
+    /// `[window_start_tick, tick]` are considered valid and included in the total.
+    /// This ensures that expired or future buckets are excluded from the calculation.
+    ///
+    /// # Parameters
+    ///
+    /// * `state` - A reference to the internal bucket state
+    /// * `tick` - The current tick (inclusive upper bound of the sliding window)
+    /// * `window_start_tick` - The oldest tick included in the window (inclusive lower bound)
+    ///
+    /// # Returns
+    ///
+    /// The total number of tokens in all buckets that fall within the current sliding window.
+    #[inline(always)]
+    fn count_tokens_in_valid_buckets_within_sliding_window(
+        &self,
+        state: &SlidingWindowCounterCoreState,
+        tick: Uint,
+        window_start_tick: Uint,
+    ) -> Uint {
+        let mut total = 0;
+        for i in 0..(self.bucket_count as usize) {
+            let start_tick = state.bucket_start_ticks[i];
+            if start_tick >= window_start_tick && start_tick <= tick {
+                total += state.buckets[i];
+            }
+        }
+        total
     }
 }

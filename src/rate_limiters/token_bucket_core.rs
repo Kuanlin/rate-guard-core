@@ -129,7 +129,7 @@ impl TokenBucketCore {
     /// // After refill interval, 5 tokens are added
     /// assert_eq!(bucket.try_acquire_at(5, 10), Ok(()));
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {

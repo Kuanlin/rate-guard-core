@@ -131,7 +131,7 @@ impl LeakyBucketCore {
     /// // After leak interval, 5 tokens should leak out
     /// assert_eq!(bucket.try_acquire_at(5, 10), Ok(()));
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {

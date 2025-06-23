@@ -169,6 +169,7 @@ impl ApproximateSlidingWindowCore {
     /// // Check capacity limit
     /// assert_eq!(counter.try_acquire_at(10, 15), Err(RateLimitError::ExceedsCapacity));
     /// ```
+    #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
@@ -217,7 +218,7 @@ impl ApproximateSlidingWindowCore {
     ///
     /// * `state` - Mutable reference to the internal state
     /// * `tick` - Current time tick
-    #[inline]
+    #[inline(always)]
     fn update_windows(&self, state: &mut ApproximateSlidingWindowCoreState, tick: Uint) {
         let expected_index = ((tick / self.window_ticks) % 2) as usize;
         let expected_start = (tick / self.window_ticks) * self.window_ticks;
@@ -246,7 +247,7 @@ impl ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// Total weighted contribution from both windows
-    #[inline]
+    #[inline(always)]
     fn calculate_weighted_contribution(&self, state: &ApproximateSlidingWindowCoreState, sw_head: Uint, sw_end: Uint) -> Uint {
         let current_idx = state.current_index;
         let other_idx = crate::other_window!(current_idx);
