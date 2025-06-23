@@ -106,6 +106,7 @@ impl SlidingWindowCounterCore {
     /// # Returns
     ///
     /// The total duration of the sliding window (bucket_ticks * bucket_count).
+    #[inline]
     fn window_ticks(&self) -> Uint {
         self.bucket_ticks.saturating_mul(self.bucket_count)
     }
@@ -149,6 +150,7 @@ impl SlidingWindowCounterCore {
     /// // Tick 35: window [6, 35], bucket 0 [0-9] expires
     /// assert_eq!(counter.try_acquire_at(30, 35), Ok(()));  // Only bucket 1 counts
     /// ```
+    #[inline]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {

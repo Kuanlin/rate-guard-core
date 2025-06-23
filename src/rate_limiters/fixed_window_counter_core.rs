@@ -129,6 +129,7 @@ impl FixedWindowCounterCore {
     /// // Window 1 [10-19]: Counter resets
     /// assert_eq!(counter.try_acquire_at(30, 10), Ok(()));
     /// ```
+    #[inline]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
