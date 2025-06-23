@@ -19,7 +19,7 @@ rate_limiter_core = "0.1"
 ---
 
 ## Usage Examples
-### Token Bucket (Allow Bursts)
+### Token Bucket
 Perfect for APIs that allow occasional bursts while maintaining average rate:
 ```rust
 use rate_limiter_core::rate_limiters::TokenBucketCore;
@@ -35,14 +35,14 @@ match limiter.try_acquire_at(1, current_tick) {
 }
 ```
 
-### Leaky Bucket (Smooth Traffic)
+### Leaky Bucket
 Great for maintaining steady traffic flow:
 ```rust
 use rate_limiter_core::rate_limiters::LeakyBucketCore;
 let limiter = LeakyBucketCore::new(50, 10, 5);
 assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
 ```
-### Fixed Window Counter (Simple Quotas)
+### Fixed Window Counter
 
 ```rust
 use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
@@ -50,14 +50,14 @@ let limiter = FixedWindowCounterCore::new(100, 60);
 assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
 ```
 
-### Sliding Window Counter (Accurate Limiting)
+### Sliding Window Counter
 ```rust
 use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
 let limiter = SlidingWindowCounterCore::new(100, 10, 6);
 assert_eq!(limiter.try_acquire_at(5, 25), Ok(()));
 ```
 
-### Approximate Sliding Window (Memory Efficient)
+### Approximate Sliding Window
 ```rust
 use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
 let limiter = ApproximateSlidingWindowCore::new(100, 60);
