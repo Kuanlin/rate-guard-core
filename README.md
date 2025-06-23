@@ -63,17 +63,6 @@ use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
 let limiter = ApproximateSlidingWindowCore::new(100, 60);
 assert_eq!(limiter.try_acquire_at(10, 30), Ok(()));
 ```
----
-
-## Algorithm Comparison
-| Algorithm             | Memory Usage | Accuracy | Burst Handling | Use Case                |
-|-----------------------|--------------|----------|----------------|--------------------------|
-| Token Bucket          | Low          | High     | Allow bursts   | API rate limiting       |
-| Leaky Bucket          | Low          | High     | Smooth only    | Constant rate traffic   |
-| Fixed Window          | Low          | Medium   | Boundary bursts| Simple quotas           |
-| Sliding Window        | Medium       | High     | Smooth bursts  | Accurate limiting       |
-| Approximate Sliding W.| Low          | Good     | Good           | Efficient approximation |
----
 
 ## Error Handling
 All rate limiters return an `AcquireResult`:
