@@ -40,6 +40,7 @@ match limiter.try_acquire_at(1, current_tick) {
 Great for maintaining steady traffic flow:
 ```rust
 use rate_limiter_core::rate_limiters::LeakyBucketCore;
+// capacity = 50 tokens, refill = 5 tokens per 10 ticks
 let limiter = LeakyBucketCore::new(50, 10, 5);
 assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
 ```
@@ -47,6 +48,7 @@ assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
 
 ```rust
 use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
+// capacity = 100 per fixed window, window size = 60 ticks
 let limiter = FixedWindowCounterCore::new(100, 60);
 assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
 ```
@@ -54,13 +56,17 @@ assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
 ### Sliding Window Counter
 ```rust
 use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
+// Window of 100 tokens across 6 buckets of 10 ticks each (50 ticks window)
 let limiter = SlidingWindowCounterCore::new(100, 10, 6);
 assert_eq!(limiter.try_acquire_at(5, 25), Ok(()));
 ```
 
 ### Approximate Sliding Window
+#### (A Memory-Optimized Version: Sliding Window Counter)
+formula: UsedCapacities = (1-X%) * lastWindowRequests + currentWindowRequests.   (X is the propotion of request time within the current window.)
 ```rust
 use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
+// Create ApproximateSlidingWindow limiter with capacity 100, window size 60 ticks
 let limiter = ApproximateSlidingWindowCore::new(100, 60);
 assert_eq!(limiter.try_acquire_at(10, 30), Ok(()));
 ```
