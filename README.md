@@ -13,7 +13,8 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate_limiter_core = "0.1"
+rate-limiter-core = { git = "https://github.com/Kuanlin/rate_limiter_core", tag = "v0.1.0" }
+
 
 ```
 ---
