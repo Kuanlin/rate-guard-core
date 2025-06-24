@@ -2,9 +2,8 @@
 A comprehensive rate limiting library for Rust applications with multiple thread-safe algorithms.
 ## Features
 - **5 Rate Limiting Algorithms**: Token Bucket, Leaky Bucket, Fixed Window, Sliding Window, and Approximate Sliding Window  
-- **Thread-Safe**: All algorithms use non-blocking locks for high concurrency  
+- **Thread-Safe**: All algorithms use non-blocking locks  
 - **Zero Dependencies**: Lightweight with no external dependencies  
-- **High Performance**: Optimized for speed and memory efficiency  
 - **Flexible Time**: Works with any time unit via abstract “ticks”  
 - **Configurable Tick Precision**: Compile-time feature flags allow choosing `u64` (default) or `u128` for tick units  
 - **Rust 1.60+**: Compatible with older Rust versions  
