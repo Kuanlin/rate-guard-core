@@ -1,4 +1,4 @@
-use rate_limiter_core::{RateLimitError};
+use rate_limiter_core::{Uint, RateLimitError};
 use rate_limiter_core::rate_limiters::TokenBucketCore;
 
 #[test]
@@ -181,11 +181,11 @@ fn test_partial_consumption() {
 
 #[test]
 fn test_saturating_operations() {
-    let bucket = TokenBucketCore::new(u64::MAX, 1, u64::MAX);
+    let bucket = TokenBucketCore::new(Uint::MAX, 1, Uint::MAX);
     
     // Test that large values don't overflow, bucket starts full
-    assert_eq!(bucket.try_acquire_at(u64::MAX - 1, 0), Ok(()));
+    assert_eq!(bucket.try_acquire_at(Uint::MAX - 1, 0), Ok(()));
     
     // Large time jumps should refill to capacity without overflow
-    assert_eq!(bucket.try_acquire_at(u64::MAX, u64::MAX), Ok(()));
+    assert_eq!(bucket.try_acquire_at(Uint::MAX, Uint::MAX), Ok(()));
 }

@@ -1,4 +1,4 @@
-use rate_limiter_core::{RateLimitError};
+use rate_limiter_core::{Uint, RateLimitError};
 use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
 
 #[test]
@@ -180,13 +180,13 @@ fn test_large_window_size() {
 
 #[test]
 fn test_saturating_operations() {
-    let counter = FixedWindowCounterCore::new(u64::MAX, u64::MAX);
+    let counter = FixedWindowCounterCore::new(Uint::MAX, Uint::MAX);
     
     // Test that large values don't overflow
-    assert_eq!(counter.try_acquire_at(u64::MAX, 0), Ok(()));
+    assert_eq!(counter.try_acquire_at(Uint::MAX, 0), Ok(()));
     
     // Large time jumps should work
-    assert_eq!(counter.try_acquire_at(u64::MAX, u64::MAX), Ok(()));
+    assert_eq!(counter.try_acquire_at(Uint::MAX, Uint::MAX), Ok(()));
 }
 
 #[test]

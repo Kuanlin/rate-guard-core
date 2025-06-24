@@ -6,6 +6,7 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 - **Zero Dependencies**: Lightweight with no external dependencies  
 - **High Performance**: Optimized for speed and memory efficiency  
 - **Flexible Time**: Works with any time unit via abstract “ticks”  
+- **Configurable Tick Precision**: Compile-time feature flags allow choosing `u64` (default) or `u128` for tick units  
 - **Rust 1.60+**: Compatible with older Rust versions  
 ---
 
@@ -14,9 +15,17 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 rate-limiter-core = { git = "https://github.com/Kuanlin/rate_limiter_core", tag = "v0.1.0" }
-
-
 ```
+
+## Tick Precision (u64 / u128)
+By default, the crate uses `u64` as the tick unit, allowing up to ~584 years of nanosecond-resolution time.
+If your application needs ultra-long durations or ultra-high precision, you can enable `u128` support via feature flags:
+
+```toml
+[dependencies]
+rate-limiter-core = { git = "https://github.com/Kuanlin/rate_limiter_core", default-features = false, features = ["tick_u128"] }
+```
+
 ---
 
 ## Usage Examples

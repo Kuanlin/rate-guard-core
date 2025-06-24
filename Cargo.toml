@@ -23,7 +23,9 @@ rust-version = "1.60"
 [dev-dependencies]
 
 [features]
-default = []
+default = ["tick_u64"] 
+tick_u64 = []
+tick_u128 = []
 
 [package.metadata.docs.rs]
 all-features = true

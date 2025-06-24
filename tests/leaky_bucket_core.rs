@@ -1,4 +1,4 @@
-use rate_limiter_core::{RateLimitError};
+use rate_limiter_core::{Uint, RateLimitError};
 use rate_limiter_core::rate_limiters::LeakyBucketCore;
 
 #[test]
@@ -142,11 +142,11 @@ fn test_large_time_gap() {
 
 #[test]
 fn test_saturating_operations() {
-    let bucket = LeakyBucketCore::new(u64::MAX, 1, u64::MAX);
+    let bucket = LeakyBucketCore::new(Uint::MAX, 1, Uint::MAX);
     
     // Test that large values don't overflow
-    assert_eq!(bucket.try_acquire_at(u64::MAX, 0), Ok(()));
+    assert_eq!(bucket.try_acquire_at(Uint::MAX, 0), Ok(()));
     
     // Large time jumps should work without overflow
-    assert_eq!(bucket.try_acquire_at(1, u64::MAX), Ok(()));
+    assert_eq!(bucket.try_acquire_at(1, Uint::MAX), Ok(()));
 }
