@@ -1,4 +1,4 @@
-# `rate_guard_core`
+# `rate-guard-core`
 A comprehensive rate limiting library for Rust applications with multiple thread-safe algorithms.
 ## Features
 - **5 Rate Limiting Algorithms**: Token Bucket, Leaky Bucket, Fixed Window, Sliding Window, and Approximate Sliding Window  
@@ -31,7 +31,7 @@ rate-guard-core = { version = "0.1.2", default-features = false, features = ["ti
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate_guard_core", tag = "v0.1.2" }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.1.2" }
 ```
 
 ## Tick Precision (u64 / u128)
@@ -40,7 +40,7 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate_guard_core", tag = "v0.1.2", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.1.2", default-features = false, features = ["tick_u128"] }
 ```
 
 ---
