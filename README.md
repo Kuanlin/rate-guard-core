@@ -10,10 +10,12 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 ---
 
 ## Quick Start
+
+### from crate.io
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-limiter-core = { git = "https://github.com/Kuanlin/rate_guard_core", tag = "v0.1.1" }
+rate-guard-core = { version = "0.1.2" }
 ```
 
 ## Tick Precision (u64 / u128)
@@ -22,7 +24,23 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 
 ```toml
 [dependencies]
-rate-limiter-core = { git = "https://github.com/Kuanlin/rate_guard_core", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { version = "0.1.2", default-features = false, features = ["tick_u128"] }
+```
+
+### from Github
+Add to your `Cargo.toml`:
+```toml
+[dependencies]
+rate-guard-core = { git = "https://github.com/Kuanlin/rate_guard_core", tag = "v0.1.2" }
+```
+
+## Tick Precision (u64 / u128)
+By default, the crate uses `u64` as the tick unit, allowing up to ~584 years of nanosecond-resolution time.
+If your application needs ultra-long durations or ultra-high precision, you can enable `u128` support via feature flags:
+
+```toml
+[dependencies]
+rate-guard-core = { git = "https://github.com/Kuanlin/rate_guard_core", tag = "v0.1.2", default-features = false, features = ["tick_u128"] }
 ```
 
 ---
