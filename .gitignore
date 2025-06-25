@@ -1,2 +1,11 @@
+# Build artifacts
 /target
+
+# Ignore lock file for libraries
 Cargo.lock
+
+# IDE/editor files
+**/*.rs.bk
+*.swp
+.idea/
+.vscode/
