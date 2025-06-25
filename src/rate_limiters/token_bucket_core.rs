@@ -18,7 +18,7 @@ use crate::{Uint, RateLimitError, AcquireResult};
 /// # Example
 ///
 /// ```rust
-/// use rate_limiter_core::rate_limiters::TokenBucketCore;
+/// use rate_guard_core::rate_limiters::TokenBucketCore;
 ///
 /// // Create a bucket with capacity 100, refilling 5 tokens every 10 ticks
 /// let bucket = TokenBucketCore::new(100, 10, 5);
@@ -67,7 +67,7 @@ impl TokenBucketCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::rate_limiters::TokenBucketCore;
     ///
     /// // Bucket that holds 100 tokens, adds 10 tokens every 5 ticks
     /// let bucket = TokenBucketCore::new(100, 5, 10);
@@ -115,8 +115,8 @@ impl TokenBucketCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::TokenBucketCore;
-    /// use rate_limiter_core::RateLimitError;
+    /// use rate_guard_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::RateLimitError;
     ///
     /// let bucket = TokenBucketCore::new(50, 10, 5);
     ///

@@ -1,5 +1,5 @@
-use rate_limiter_core::{Uint, RateLimitError};
-use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
+use rate_guard_core::{Uint, RateLimitError};
+use rate_guard_core::rate_limiters::FixedWindowCounterCore;
 
 #[test]
 fn test_new_fixed_window_counter() {

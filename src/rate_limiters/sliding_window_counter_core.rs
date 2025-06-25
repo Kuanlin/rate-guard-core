@@ -26,7 +26,7 @@ use crate::{Uint, RateLimitError, AcquireResult};
 /// # Example
 ///
 /// ```rust
-/// use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
+/// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
 ///
 /// // Create counter with capacity 100, bucket size 5 ticks, 4 buckets total
 /// // Total window size = 5 * 4 = 20 ticks
@@ -79,7 +79,7 @@ impl SlidingWindowCounterCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
+    /// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
     ///
     /// // Window of 100 tokens across 5 buckets of 10 ticks each (50 tick window)
     /// let counter = SlidingWindowCounterCore::new(100, 10, 5);
@@ -138,8 +138,8 @@ impl SlidingWindowCounterCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
-    /// use rate_limiter_core::RateLimitError;
+    /// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
+    /// use rate_guard_core::RateLimitError;
     ///
     /// let counter = SlidingWindowCounterCore::new(50, 10, 3); // 30-tick window
     ///

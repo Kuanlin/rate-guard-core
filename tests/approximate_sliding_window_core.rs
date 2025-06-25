@@ -1,5 +1,5 @@
-use rate_limiter_core::{RateLimitError};
-use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
+use rate_guard_core::{RateLimitError};
+use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
 
 #[test]
 fn test_new_approximate_sliding_window() {
@@ -100,7 +100,7 @@ fn test_approximation_accuracy() {
 #[test]
 fn test_macro_safety() {
     // Test other_window! macro
-    use rate_limiter_core::other_window;
+    use rate_guard_core::other_window;
     assert_eq!(other_window!(0), 1);
     assert_eq!(other_window!(1), 0);
 }

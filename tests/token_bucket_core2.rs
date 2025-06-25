@@ -1,5 +1,5 @@
-use rate_limiter_core::{RateLimitError};
-use rate_limiter_core::rate_limiters::TokenBucketCore;
+use rate_guard_core::{RateLimitError};
+use rate_guard_core::rate_limiters::TokenBucketCore;
 
 #[test]
 fn test_contention_failure() {

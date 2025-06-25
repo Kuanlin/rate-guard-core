@@ -10,7 +10,7 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use rate_limiter_core::rate_limiters::TokenBucketCore;
+//! use rate_guard_core::rate_limiters::TokenBucketCore;
 //!
 //! // Capacity: 100 tokens
 //! // Refill: 10 tokens every 5 ticks
@@ -29,7 +29,7 @@
 //! Tokens leak out at a constant rate, providing smooth traffic shaping:
 //!
 //! ```rust
-//! # use rate_limiter_core::rate_limiters::LeakyBucketCore;
+//! # use rate_guard_core::rate_limiters::LeakyBucketCore;
 //! let limiter = LeakyBucketCore::new(100, 10, 5); // leak 5 tokens every 10 ticks
 //! ```
 //!
@@ -37,7 +37,7 @@
 //! Allows bursts up to capacity while maintaining average rate:
 //!
 //! ```rust
-//! # use rate_limiter_core::rate_limiters::TokenBucketCore;
+//! # use rate_guard_core::rate_limiters::TokenBucketCore;
 //! let limiter = TokenBucketCore::new(100, 10, 5); // add 5 tokens every 10 ticks
 //! ```
 //!
@@ -45,7 +45,7 @@
 //! Simple time-window based counting:
 //!
 //! ```rust
-//! # use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
+//! # use rate_guard_core::rate_limiters::FixedWindowCounterCore;
 //! let limiter = FixedWindowCounterCore::new(100, 60); // 100 requests per 60 ticks
 //! ```
 //!
@@ -53,7 +53,7 @@
 //! Accurate sliding window using multiple time buckets:
 //!
 //! ```rust
-//! # use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
+//! # use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
 //! let limiter = SlidingWindowCounterCore::new(100, 10, 6); // 100 requests per 60 ticks
 //! ```
 //!
@@ -61,7 +61,7 @@
 //! Memory-efficient approximation using only two windows:
 //!
 //! ```rust
-//! # use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
+//! # use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
 //! let limiter = ApproximateSlidingWindowCore::new(100, 60); // ~100 requests per 60 ticks
 //! ```
 //!
@@ -163,8 +163,8 @@ impl std::error::Error for RateLimitError {}
 ///
 /// # Example
 /// ```rust
-/// use rate_limiter_core::{AcquireResult, RateLimitError};
-/// use rate_limiter_core::rate_limiters::TokenBucketCore;
+/// use rate_guard_core::{AcquireResult, RateLimitError};
+/// use rate_guard_core::rate_limiters::TokenBucketCore;
 ///
 /// let limiter = TokenBucketCore::new(10, 1, 1);
 /// let result: AcquireResult = limiter.try_acquire_at(5, 0);

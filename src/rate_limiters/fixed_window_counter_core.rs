@@ -25,7 +25,7 @@ use crate::{Uint, RateLimitError, AcquireResult};
 /// # Example
 ///
 /// ```rust
-/// use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
+/// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
 ///
 /// // Create a counter with capacity 100 per window of 10 ticks
 /// let counter = FixedWindowCounterCore::new(100, 10);
@@ -71,7 +71,7 @@ impl FixedWindowCounterCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
     ///
     /// // Allow 50 requests per window of 20 ticks
     /// let counter = FixedWindowCounterCore::new(50, 20);
@@ -117,8 +117,8 @@ impl FixedWindowCounterCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
-    /// use rate_limiter_core::RateLimitError;
+    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::RateLimitError;
     ///
     /// let counter = FixedWindowCounterCore::new(30, 10);
     ///

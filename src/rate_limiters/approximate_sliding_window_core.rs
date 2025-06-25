@@ -17,7 +17,7 @@ use crate::{Uint, RateLimitError, AcquireResult};
 /// # Example
 ///
 /// ```rust
-/// use rate_limiter_core::other_window;
+/// use rate_guard_core::other_window;
 ///
 /// assert_eq!(other_window!(0), 1);
 /// assert_eq!(other_window!(1), 0);
@@ -60,7 +60,7 @@ macro_rules! other_window {
 /// # Example
 ///
 /// ```rust
-/// use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
+/// use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
 ///
 /// // Create counter with capacity 100, window size 10 ticks
 /// let counter = ApproximateSlidingWindowCore::new(100, 10);
@@ -106,7 +106,7 @@ impl ApproximateSlidingWindowCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
+    /// use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
     ///
     /// // Allow 200 tokens within a sliding window of 20 ticks
     /// let counter = ApproximateSlidingWindowCore::new(200, 20);
@@ -155,8 +155,8 @@ impl ApproximateSlidingWindowCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
-    /// use rate_limiter_core::RateLimitError;
+    /// use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
+    /// use rate_guard_core::RateLimitError;
     ///
     /// let counter = ApproximateSlidingWindowCore::new(60, 10);
     ///

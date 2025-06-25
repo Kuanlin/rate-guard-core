@@ -1,4 +1,4 @@
-# `rate_limiter_core`
+# `rate_guard_core`
 A comprehensive rate limiting library for Rust applications with multiple thread-safe algorithms.
 ## Features
 - **5 Rate Limiting Algorithms**: Token Bucket, Leaky Bucket, Fixed Window, Sliding Window, and Approximate Sliding Window  
@@ -13,7 +13,7 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-limiter-core = { git = "https://github.com/Kuanlin/rate_limiter_core", tag = "v0.1.1" }
+rate-limiter-core = { git = "https://github.com/Kuanlin/rate_guard_core", tag = "v0.1.1" }
 ```
 
 ## Tick Precision (u64 / u128)
@@ -22,7 +22,7 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 
 ```toml
 [dependencies]
-rate-limiter-core = { git = "https://github.com/Kuanlin/rate_limiter_core", default-features = false, features = ["tick_u128"] }
+rate-limiter-core = { git = "https://github.com/Kuanlin/rate_guard_core", default-features = false, features = ["tick_u128"] }
 ```
 
 ---
@@ -31,7 +31,7 @@ rate-limiter-core = { git = "https://github.com/Kuanlin/rate_limiter_core", defa
 ### Token Bucket
 Perfect for APIs that allow occasional bursts while maintaining average rate:
 ```rust
-use rate_limiter_core::rate_limiters::TokenBucketCore;
+use rate_guard_core::rate_limiters::TokenBucketCore;
 // Allow 100 requests, refill 10 every 5 seconds
 let limiter = TokenBucketCore::new(100, 5, 10); 
 let current_tick = std::time::SystemTime::now() 
@@ -47,7 +47,7 @@ match limiter.try_acquire_at(1, current_tick) {
 ### Leaky Bucket
 Great for maintaining steady traffic flow:
 ```rust
-use rate_limiter_core::rate_limiters::LeakyBucketCore;
+use rate_guard_core::rate_limiters::LeakyBucketCore;
 // capacity = 50 tokens, refill = 5 tokens per 10 ticks
 let limiter = LeakyBucketCore::new(50, 10, 5);
 assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
@@ -55,7 +55,7 @@ assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
 ### Fixed Window Counter
 
 ```rust
-use rate_limiter_core::rate_limiters::FixedWindowCounterCore;
+use rate_guard_core::rate_limiters::FixedWindowCounterCore;
 // capacity = 100 per fixed window, window size = 60 ticks
 let limiter = FixedWindowCounterCore::new(100, 60);
 assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
@@ -63,7 +63,7 @@ assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
 
 ### Sliding Window Counter
 ```rust
-use rate_limiter_core::rate_limiters::SlidingWindowCounterCore;
+use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
 // Window of 100 tokens across 6 buckets of 10 ticks each (50 ticks window)
 let limiter = SlidingWindowCounterCore::new(100, 10, 6);
 assert_eq!(limiter.try_acquire_at(5, 25), Ok(()));
@@ -73,7 +73,7 @@ assert_eq!(limiter.try_acquire_at(5, 25), Ok(()));
 #### (A Memory-Optimized Version: Sliding Window Counter)
 formula: UsedCapacities = (1-X%) * lastWindowRequests + currentWindowRequests.   (X is the propotion of request time within the current window.)
 ```rust
-use rate_limiter_core::rate_limiters::ApproximateSlidingWindowCore;
+use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
 // Create ApproximateSlidingWindow limiter with capacity 100, window size 60 ticks
 let limiter = ApproximateSlidingWindowCore::new(100, 60);
 assert_eq!(limiter.try_acquire_at(10, 30), Ok(()));
@@ -82,7 +82,7 @@ assert_eq!(limiter.try_acquire_at(10, 30), Ok(()));
 ## Error Handling
 All rate limiters return an `AcquireResult`:
 ```rust
-use rate_limiter_core::{RateLimitError, AcquireResult};
+use rate_guard_core::{RateLimitError, AcquireResult};
 match limiter.try_acquire_at(1, tick) {
     Ok(()) => {
         // Request allowed
@@ -116,7 +116,7 @@ let tick = my_monotonic_timer.elapsed_ticks();
 ```rust
 use std::sync::Arc;
 use std::thread;
-use rate_limiter_core::rate_limiters::TokenBucketCore;
+use rate_guard_core::rate_limiters::TokenBucketCore;
 let limiter = Arc::new(TokenBucketCore::new(100, 1, 10));
 for _ in 0..10 {
     let limiter = limiter.clone();

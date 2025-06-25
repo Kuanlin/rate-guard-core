@@ -17,7 +17,7 @@ use crate::{Uint, RateLimitError, AcquireResult};
 /// # Example
 ///
 /// ```rust
-/// use rate_limiter_core::rate_limiters::LeakyBucketCore;
+/// use rate_guard_core::rate_limiters::LeakyBucketCore;
 ///
 /// // Create a bucket with capacity 100, leaking 5 tokens every 10 ticks
 /// let bucket = LeakyBucketCore::new(100, 10, 5);
@@ -69,7 +69,7 @@ impl LeakyBucketCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::LeakyBucketCore;
+    /// use rate_guard_core::rate_limiters::LeakyBucketCore;
     ///
     /// // Bucket that holds 100 tokens, leaks 10 tokens every 5 ticks
     /// let bucket = LeakyBucketCore::new(100, 5, 10);
@@ -117,8 +117,8 @@ impl LeakyBucketCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_limiter_core::rate_limiters::LeakyBucketCore;
-    /// use rate_limiter_core::RateLimitError;
+    /// use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// use rate_guard_core::RateLimitError;
     ///
     /// let bucket = LeakyBucketCore::new(50, 10, 5);
     ///
