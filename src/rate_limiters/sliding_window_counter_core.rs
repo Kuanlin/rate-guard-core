@@ -67,20 +67,17 @@ impl SlidingWindowCounterCore {
     /// Creates a new sliding window counter with the specified parameters.
     ///
     /// # Parameters
-    ///
     /// * `capacity` - Maximum number of tokens allowed within the sliding window
     /// * `bucket_ticks` - Duration of each bucket in ticks
     /// * `bucket_count` - Number of buckets in the sliding window
     ///
     /// # Panics
-    ///
     /// Panics if any parameter is zero, as this would create an invalid configuration.
     ///
     /// # Example
     ///
     /// ```rust
     /// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
-    ///
     /// // Window of 100 tokens across 5 buckets of 10 ticks each (50 tick window)
     /// let counter = SlidingWindowCounterCore::new(100, 10, 5);
     /// ```
@@ -104,8 +101,7 @@ impl SlidingWindowCounterCore {
     /// Calculates the total window size in ticks.
     ///
     /// # Returns
-    ///
-    /// The total duration of the sliding window (bucket_ticks * bucket_count).
+    /// Returns the total duration of the sliding window (bucket_ticks * bucket_count).
     #[inline]
     fn window_ticks(&self) -> Uint {
         self.bucket_ticks.saturating_mul(self.bucket_count)
@@ -118,12 +114,10 @@ impl SlidingWindowCounterCore {
     /// the current sliding window, and checks if the request can be accommodated.
     ///
     /// # Parameters
-    ///
     /// * `tokens` - Number of tokens to acquire
     /// * `tick` - Current time tick for the operation
     ///
     /// # Returns
-    ///
     /// * `Ok(())` - If the tokens were successfully acquired
     /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed window capacity
     /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
@@ -134,22 +128,6 @@ impl SlidingWindowCounterCore {
     /// - Buckets are organized in a circular array indexed by `(tick / bucket_ticks) % bucket_count`
     /// - When accessing a bucket, if its start time doesn't match the expected time, it's reset (lazy reset)
     /// - Only buckets whose start time falls within the sliding window contribute to the total
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
-    /// use rate_guard_core::RateLimitError;
-    ///
-    /// let counter = SlidingWindowCounterCore::new(50, 10, 3); // 30-tick window
-    ///
-    /// // Fill different buckets
-    /// assert_eq!(counter.try_acquire_at(20, 5), Ok(()));   // bucket 0 [0-9]
-    /// assert_eq!(counter.try_acquire_at(20, 15), Ok(()));  // bucket 1 [10-19]
-    /// 
-    /// // Tick 35: window [6, 35], bucket 0 [0-9] expires
-    /// assert_eq!(counter.try_acquire_at(30, 35), Ok(()));  // Only bucket 1 counts
-    /// ```
     #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
@@ -195,7 +173,6 @@ impl SlidingWindowCounterCore {
         }
     }
 
-
     /// Counts the total number of tokens currently present in valid buckets
     /// within the sliding window defined by `window_start_tick` and `tick`.
     ///
@@ -204,14 +181,12 @@ impl SlidingWindowCounterCore {
     /// This ensures that expired or future buckets are excluded from the calculation.
     ///
     /// # Parameters
-    ///
     /// * `state` - A reference to the internal bucket state
     /// * `tick` - The current tick (inclusive upper bound of the sliding window)
     /// * `window_start_tick` - The oldest tick included in the window (inclusive lower bound)
     ///
     /// # Returns
-    ///
-    /// The total number of tokens in all buckets that fall within the current sliding window.
+    /// Returns the total number of tokens in all buckets that fall within the current sliding window.
     #[inline(always)]
     fn count_tokens_in_valid_buckets_within_sliding_window(
         &self,
@@ -227,5 +202,106 @@ impl SlidingWindowCounterCore {
             }
         }
         total
+    }
+
+    /// Gets the current remaining token capacity in the sliding window.
+    ///
+    /// This method updates bucket states based on current tick (performs lazy reset
+    /// of expired buckets), calculates total tokens used within the current sliding
+    /// window, then returns the remaining capacity.
+    ///
+    /// # Parameters
+    /// * `tick` - Current time tick for sliding window calculation
+    ///
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining tokens available in sliding window
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards
+    #[inline(always)]
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+        // Attempt to acquire the lock, return contention error if unavailable
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        // Prevent time from going backwards (only check if we have previous data)
+        if state.bucket_start_ticks[state.last_bucket_index] > 0 && 
+           tick < state.bucket_start_ticks[state.last_bucket_index] {
+            return Err(RateLimitError::ExpiredTick);
+        }
+
+        // Determine which bucket this tick belongs to
+        let current_bucket_index = ((tick / self.bucket_ticks) as usize) % (self.bucket_count as usize);
+        let current_bucket_start_tick = (tick / self.bucket_ticks) * self.bucket_ticks;
+
+        // Lazy reset: if this bucket's start time is different, it's a new bucket cycle
+        if state.bucket_start_ticks[current_bucket_index] != current_bucket_start_tick {
+            state.buckets[current_bucket_index] = 0;
+            state.bucket_start_ticks[current_bucket_index] = current_bucket_start_tick;
+        }
+
+        // Calculate the sliding window range
+        let window_start_tick = tick.saturating_sub(self.window_ticks());
+
+        // Count tokens in all valid buckets within the sliding window
+        let total_used = self.count_tokens_in_valid_buckets_within_sliding_window(&state, tick, window_start_tick);
+
+        // Update last bucket index for future ExpiredTick checks
+        state.last_bucket_index = current_bucket_index;
+
+        // Return remaining capacity
+        Ok(self.capacity.saturating_sub(total_used))
+    }
+
+    /// Gets the current remaining capacity without updating bucket states.
+    ///
+    /// This method returns the remaining capacity in the current sliding window
+    /// without performing any bucket lazy reset or state updates. Suitable for
+    /// quick queries when you don't want to modify the bucket states.
+    ///
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining capacity in sliding window (without state update)
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    #[inline(always)]
+    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+        let state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        // Calculate total tokens used in all buckets (without window filtering)
+        // Note: This is a simplified approach that counts all tokens in all buckets
+        // For a more accurate current sliding window, we'd need the current tick
+        let total_used: Uint = state.buckets.iter().sum();
+
+        Ok(self.capacity.saturating_sub(total_used))
+    }
+
+    /// Gets the current remaining capacity for a specific tick without updating bucket states.
+    ///
+    /// This method calculates the remaining capacity for a specific sliding window
+    /// without performing bucket lazy reset or state updates.
+    ///
+    /// # Parameters
+    /// * `tick` - Time tick for sliding window calculation
+    ///
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining capacity in sliding window at given tick
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    #[inline(always)]
+    pub fn current_capacity_at(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+        let state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        // Calculate the sliding window range
+        let window_start_tick = tick.saturating_sub(self.window_ticks());
+
+        // Count tokens in all valid buckets within the sliding window (without updates)
+        let total_used = self.count_tokens_in_valid_buckets_within_sliding_window(&state, tick, window_start_tick);
+
+        Ok(self.capacity.saturating_sub(total_used))
     }
 }

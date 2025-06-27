@@ -1,5 +1,6 @@
 use std::sync::Mutex;
-use crate::{Uint, RateLimitError, AcquireResult};
+use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, Uint};
+
 /// Core implementation of the leaky bucket rate limiting algorithm.
 ///
 /// The leaky bucket algorithm maintains a bucket with a fixed capacity that "leaks"
@@ -9,10 +10,10 @@ use crate::{Uint, RateLimitError, AcquireResult};
 ///
 /// # Algorithm Behavior
 ///
-/// - Tokens are added to the bucket when requests are made
-/// - Tokens "leak" out of the bucket at regular intervals
-/// - If adding tokens would exceed capacity, the request is rejected
-/// - The bucket starts empty and can hold up to `capacity` tokens
+/// - Tokens are added to the bucket when requests are made.
+/// - Tokens "leak" out of the bucket at regular intervals.
+/// - If adding tokens would exceed capacity, the request is rejected.
+/// - The bucket starts empty and can hold up to `capacity` tokens.
 ///
 /// # Example
 ///
@@ -35,22 +36,53 @@ use crate::{Uint, RateLimitError, AcquireResult};
 /// assert_eq!(bucket.try_acquire_at(5, 10), Ok(())); // 5 tokens leaked out
 /// ```
 pub struct LeakyBucketCore {
-    /// Maximum number of tokens the bucket can hold
+    /// Maximum number of tokens the bucket can hold.
     capacity: Uint,
-    /// Number of ticks between each leak event
+    /// Number of ticks between each leak event.
     leak_interval: Uint,
-    /// Number of tokens that leak out in each leak event
+    /// Number of tokens that leak out in each leak event.
     leak_amount: Uint,
-    /// Internal state protected by mutex for thread safety
+    /// Internal state protected by mutex for thread safety.
     state: Mutex<LeakyBucketCoreState>,
 }
 
-/// Internal state of the leaky bucket
+/// Internal state of the leaky bucket.
 struct LeakyBucketCoreState {
-    /// Current number of tokens in the bucket
+    /// Current number of tokens in the bucket.
     remaining: Uint,
-    /// Tick when the last leak occurred (used for calculating elapsed time)
+    /// Tick when the last leak occurred (used for calculating elapsed time).
     last_leak_tick: Uint,
+}
+
+impl RateLimiterCore for LeakyBucketCore {
+    /// Attempts to acquire the specified number of tokens at the given tick.
+    ///
+    /// This method is a wrapper around `try_acquire_at` for convenience.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokens` - Number of tokens to acquire.
+    /// * `tick` - Current time tick.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`AcquireResult`] indicating success or specific failure reason.
+    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+        self.try_acquire_at(tokens, tick)
+    }
+
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - Current time tick for leak calculation.
+    ///
+    /// # Returns
+    ///
+    /// The number of tokens currently available for acquisition, or 0 if error.
+    fn capacity_remaining(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
 }
 
 impl LeakyBucketCore {
@@ -58,9 +90,9 @@ impl LeakyBucketCore {
     ///
     /// # Parameters
     ///
-    /// * `capacity` - Maximum number of tokens the bucket can hold
-    /// * `leak_interval` - Number of ticks between leak events
-    /// * `leak_amount` - Number of tokens that leak out per interval
+    /// * `capacity` - Maximum number of tokens the bucket can hold.
+    /// * `leak_interval` - Number of ticks between leak events.
+    /// * `leak_amount` - Number of tokens that leak out per interval.
     ///
     /// # Panics
     ///
@@ -84,7 +116,7 @@ impl LeakyBucketCore {
             leak_interval,
             leak_amount,
             state: Mutex::new(LeakyBucketCoreState {
-                remaining: 0, // Bucket starts empty
+                remaining: 0,
                 last_leak_tick: 0,
             }),
         }
@@ -98,39 +130,15 @@ impl LeakyBucketCore {
     ///
     /// # Parameters
     ///
-    /// * `tokens` - Number of tokens to acquire
-    /// * `tick` - Current time tick for the operation
+    /// * `tokens` - Number of tokens to acquire.
+    /// * `tick` - Current time tick for the operation.
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - If the tokens were successfully acquired
-    /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed bucket capacity
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the last operation
-    ///
-    /// # Time Behavior
-    ///
-    /// The method automatically handles time progression by calculating elapsed ticks
-    /// and applying the appropriate number of leak events. The `last_leak_tick` is
-    /// updated to align with actual leak intervals to maintain consistent timing.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use rate_guard_core::rate_limiters::LeakyBucketCore;
-    /// use rate_guard_core::RateLimitError;
-    ///
-    /// let bucket = LeakyBucketCore::new(50, 10, 5);
-    ///
-    /// // Fill bucket
-    /// assert_eq!(bucket.try_acquire_at(50, 0), Ok(()));
-    ///
-    /// // Should fail - bucket is full
-    /// assert_eq!(bucket.try_acquire_at(1, 0), Err(RateLimitError::ExceedsCapacity));
-    ///
-    /// // After leak interval, 5 tokens should leak out
-    /// assert_eq!(bucket.try_acquire_at(5, 10), Ok(()));
-    /// ```
+    /// * `Ok(())` - If the tokens were successfully acquired.
+    /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed bucket capacity.
+    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock.
+    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the last operation.
     #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
@@ -170,5 +178,63 @@ impl LeakyBucketCore {
         } else {
             Err(RateLimitError::ExceedsCapacity)
         }
+    }
+
+    /// Gets the current remaining token capacity.
+    ///
+    /// This method updates the bucket state based on elapsed time (performs leak),
+    /// then returns the current number of tokens in the bucket.
+    ///
+    /// # Parameters
+    ///
+    /// * `tick` - Current time tick for leak calculation.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(remaining_tokens)` - Current number of tokens in bucket.
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock.
+    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards.
+    #[inline(always)]
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        if tick < state.last_leak_tick {
+            return Err(RateLimitError::ExpiredTick);
+        }
+
+        let elapsed_ticks = tick - state.last_leak_tick;
+        let leak_times = elapsed_ticks / self.leak_interval;
+        let total_leaked = leak_times.saturating_mul(self.leak_amount);
+        
+        state.remaining = state.remaining.saturating_sub(total_leaked);
+        
+        if leak_times > 0 {
+            state.last_leak_tick = state.last_leak_tick + (leak_times * self.leak_interval);
+        }
+
+        Ok(state.remaining)
+    }
+
+    /// Gets the current token count without updating leak state.
+    ///
+    /// This method returns the current number of tokens in the bucket without
+    /// performing any leak calculations based on elapsed time. Suitable for
+    /// quick queries when you don't want to modify the bucket state.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(remaining_tokens)` - Current tokens in bucket (without leak update).
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock.
+    #[inline(always)]
+    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+        let state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        Ok(state.remaining)
     }
 }

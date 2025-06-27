@@ -208,3 +208,151 @@ fn test_consecutive_windows() {
     // Check independence of each window
     assert_eq!(counter.try_acquire_at(1, 35), Err(RateLimitError::ExceedsCapacity));
 }
+
+// Add to tests/fixed_window_counter_core.rs
+
+#[test]
+fn test_capacity_remaining() {
+    let counter = FixedWindowCounterCore::new(100, 10); // Windows: [0-9], [10-19], [20-29]...
+    
+    // Initial state should have full capacity
+    assert_eq!(counter.capacity_remaining(0).unwrap(), 100);
+    
+    // Use some tokens in window 0
+    assert_eq!(counter.try_acquire_at(30, 5), Ok(()));
+    assert_eq!(counter.capacity_remaining(5).unwrap(), 70);
+    
+    // Use more tokens in same window
+    assert_eq!(counter.try_acquire_at(20, 8), Ok(()));
+    assert_eq!(counter.capacity_remaining(8).unwrap(), 50);
+    
+    // Window transition - should reset to full capacity
+    assert_eq!(counter.capacity_remaining(10).unwrap(), 100);
+}
+
+#[test]
+fn test_current_capacity_no_window_update() {
+    let counter = FixedWindowCounterCore::new(100, 10);
+    
+    // Use some tokens
+    assert_eq!(counter.try_acquire_at(40, 5), Ok(()));
+    
+    // current_capacity should not trigger window transition
+    assert_eq!(counter.current_capacity().unwrap(), 60);
+    
+    // Even if we're past window boundary, current_capacity returns same value
+    assert_eq!(counter.current_capacity().unwrap(), 60);
+    
+    // But capacity_remaining will trigger window transition
+    assert_eq!(counter.capacity_remaining(10).unwrap(), 100); // New window
+}
+
+#[test]
+fn test_capacity_remaining_expired_tick() {
+    let counter = FixedWindowCounterCore::new(100, 10);
+    
+    // Transition to window 1 [10-19], start_tick updates to 10
+    assert_eq!(counter.try_acquire_at(10, 15), Ok(()));
+    
+    // Going backwards below start_tick should fail
+    assert_eq!(counter.capacity_remaining(9), Err(RateLimitError::ExpiredTick));
+    assert_eq!(counter.capacity_remaining(5), Err(RateLimitError::ExpiredTick));
+}
+
+#[test]
+fn test_window_transition_behavior() {
+    let counter = FixedWindowCounterCore::new(50, 10);
+    
+    // Window 0 [0-9]: use 30 tokens
+    assert_eq!(counter.try_acquire_at(30, 5), Ok(()));
+    assert_eq!(counter.capacity_remaining(5).unwrap(), 20);
+    
+    // Window 1 [10-19]: should reset capacity
+    assert_eq!(counter.capacity_remaining(10).unwrap(), 50);
+    
+    // Use tokens in new window
+    assert_eq!(counter.try_acquire_at(25, 12), Ok(()));
+    assert_eq!(counter.capacity_remaining(12).unwrap(), 25);
+    
+    // Window 2 [20-29]: should reset again
+    assert_eq!(counter.capacity_remaining(20).unwrap(), 50);
+}
+
+#[test]
+fn test_current_vs_remaining_consistency() {
+    let counter = FixedWindowCounterCore::new(100, 10);
+    
+    // Use some tokens
+    assert_eq!(counter.try_acquire_at(40, 5), Ok(()));
+    
+    // Both should return same value within same window
+    assert_eq!(counter.current_capacity().unwrap(), 60);
+    assert_eq!(counter.capacity_remaining(5).unwrap(), 60);
+    
+    // After capacity_remaining triggers window transition, current_capacity should reflect the update
+    assert_eq!(counter.capacity_remaining(10).unwrap(), 100); // New window
+    assert_eq!(counter.current_capacity().unwrap(), 100);
+}
+
+#[test]
+fn test_skip_multiple_windows() {
+    let counter = FixedWindowCounterCore::new(80, 10);
+    
+    // Use some capacity in window 0 [0-9]
+    assert_eq!(counter.try_acquire_at(30, 5), Ok(()));
+    assert_eq!(counter.capacity_remaining(5).unwrap(), 50);
+    
+    // Jump multiple windows to tick 35 (window 3: [30-39])
+    assert_eq!(counter.capacity_remaining(35).unwrap(), 80); // Full capacity in new window
+    
+    // Use some tokens in the new window
+    assert_eq!(counter.try_acquire_at(20, 36), Ok(()));
+    assert_eq!(counter.capacity_remaining(36).unwrap(), 60);
+}
+
+#[test]
+fn test_window_boundary_precise() {
+    let counter = FixedWindowCounterCore::new(100, 10);
+    
+    // Last tick of window 0
+    assert_eq!(counter.try_acquire_at(50, 9), Ok(()));
+    assert_eq!(counter.capacity_remaining(9).unwrap(), 50);
+    
+    // First tick of window 1 - should reset
+    assert_eq!(counter.capacity_remaining(10).unwrap(), 100);
+    
+    // Use tokens in new window
+    assert_eq!(counter.try_acquire_at(30, 11), Ok(()));
+    assert_eq!(counter.capacity_remaining(11).unwrap(), 70);
+}
+
+#[test]
+fn test_zero_capacity_remaining() {
+    let counter = FixedWindowCounterCore::new(50, 10);
+    
+    // Use all capacity
+    assert_eq!(counter.try_acquire_at(50, 5), Ok(()));
+    assert_eq!(counter.capacity_remaining(5).unwrap(), 0);
+    
+    // Still in same window, should remain 0
+    assert_eq!(counter.capacity_remaining(8).unwrap(), 0);
+    
+    // New window should reset to full capacity
+    assert_eq!(counter.capacity_remaining(10).unwrap(), 50);
+}
+
+#[test]
+fn test_single_tick_window() {
+    let counter = FixedWindowCounterCore::new(10, 1); // Each tick is a separate window
+    
+    // Window 0: tick 0
+    assert_eq!(counter.capacity_remaining(0).unwrap(), 10);
+    assert_eq!(counter.try_acquire_at(8, 0), Ok(()));
+    assert_eq!(counter.capacity_remaining(0).unwrap(), 2);
+    
+    // Window 1: tick 1 (should reset)
+    assert_eq!(counter.capacity_remaining(1).unwrap(), 10);
+    
+    // Window 2: tick 2 (should reset)
+    assert_eq!(counter.capacity_remaining(2).unwrap(), 10);
+}

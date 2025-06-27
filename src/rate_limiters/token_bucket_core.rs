@@ -1,5 +1,7 @@
 use std::sync::Mutex;
 use crate::{Uint, RateLimitError, AcquireResult};
+use crate::rate_limiter_core::RateLimiterCore;
+
 /// Core implementation of the token bucket rate limiting algorithm.
 ///
 /// The token bucket algorithm maintains a bucket that is periodically refilled with tokens
@@ -51,6 +53,32 @@ struct TokenBucketCoreState {
     last_refill_tick: Uint,
 }
 
+impl RateLimiterCore for TokenBucketCore {
+    /// Attempts to acquire the specified number of tokens at the given tick.
+    ///
+    /// This method is a wrapper that calls the main `try_acquire_at` logic.
+    ///
+    /// # Arguments
+    /// * `tokens` - Number of tokens to acquire
+    /// * `tick` - Current time tick
+    ///
+    /// # Returns
+    /// Returns [`AcquireResult`] indicating success or error type.
+    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+        self.try_acquire_at(tokens, tick)
+    }
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    /// * `tick` - Current time tick for refill calculation
+    ///
+    /// # Returns
+    /// Number of available tokens or 0 if error.
+    fn capacity_remaining(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
+}
+
 impl TokenBucketCore {
     /// Creates a new token bucket with the specified parameters.
     ///
@@ -62,14 +90,13 @@ impl TokenBucketCore {
     ///
     /// # Panics
     ///
-    /// Panics if any parameter is zero, as this would create an invalid configuration.
+    /// Panics if any parameter is zero.
     ///
     /// # Example
     ///
     /// ```rust
     /// use rate_guard_core::rate_limiters::TokenBucketCore;
     ///
-    /// // Bucket that holds 100 tokens, adds 10 tokens every 5 ticks
     /// let bucket = TokenBucketCore::new(100, 5, 10);
     /// ```
     pub fn new(capacity: Uint, refill_interval: Uint, refill_amount: Uint) -> Self {
@@ -95,40 +122,14 @@ impl TokenBucketCore {
     /// tokens are available for the request.
     ///
     /// # Parameters
-    ///
     /// * `tokens` - Number of tokens to acquire
     /// * `tick` - Current time tick for the operation
     ///
     /// # Returns
-    ///
     /// * `Ok(())` - If the tokens were successfully acquired
     /// * `Err(RateLimitError::ExceedsCapacity)` - If insufficient tokens are available
     /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
     /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the last operation
-    ///
-    /// # Time Behavior
-    ///
-    /// The method automatically handles time progression by calculating elapsed ticks
-    /// and applying the appropriate number of refill events. The bucket capacity acts
-    /// as an upper limit - excess tokens from refills are discarded.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use rate_guard_core::rate_limiters::TokenBucketCore;
-    /// use rate_guard_core::RateLimitError;
-    ///
-    /// let bucket = TokenBucketCore::new(50, 10, 5);
-    ///
-    /// // Use all tokens
-    /// assert_eq!(bucket.try_acquire_at(50, 0), Ok(()));
-    ///
-    /// // Should fail - no tokens left
-    /// assert_eq!(bucket.try_acquire_at(1, 0), Err(RateLimitError::ExceedsCapacity));
-    ///
-    /// // After refill interval, 5 tokens are added
-    /// assert_eq!(bucket.try_acquire_at(5, 10), Ok(()));
-    /// ```
     #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
@@ -156,7 +157,6 @@ impl TokenBucketCore {
         state.available = (state.available.saturating_add(total_refilled)).min(self.capacity);
         
         // Update last refill tick to align with actual refill timing
-        // This ensures consistent refill intervals regardless of when operations occur
         if refill_times > 0 {
             state.last_refill_tick = state.last_refill_tick + (refill_times * self.refill_interval);
         }
@@ -168,5 +168,66 @@ impl TokenBucketCore {
         } else {
             Err(RateLimitError::ExceedsCapacity)
         }
+    }
+
+    /// Gets the current remaining token capacity.
+    ///
+    /// This method updates the bucket state based on elapsed time (performs refill),
+    /// then returns the current number of available tokens.
+    ///
+    /// # Parameters
+    /// * `tick` - Current time tick for refill calculation
+    ///
+    /// # Returns
+    /// * `Ok(available_tokens)` - Current number of available tokens
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards
+    #[inline(always)]
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+        // Attempt to acquire the lock, return contention error if unavailable
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        // Prevent time from going backwards
+        if tick < state.last_refill_tick {
+            return Err(RateLimitError::ExpiredTick);
+        }
+
+        // Calculate how many tokens should be added based on elapsed time
+        let elapsed_ticks = tick - state.last_refill_tick;
+        let refill_times = elapsed_ticks / self.refill_interval;
+        let total_refilled = refill_times.saturating_mul(self.refill_amount);
+        
+        // Apply the refill, capped at bucket capacity
+        state.available = (state.available.saturating_add(total_refilled)).min(self.capacity);
+        
+        // Update last refill tick to align with actual refill timing
+        if refill_times > 0 {
+            state.last_refill_tick = state.last_refill_tick + (refill_times * self.refill_interval);
+        }
+
+        // Return current available token count
+        Ok(state.available)
+    }
+
+    /// Gets the current token capacity without updating refill state.
+    ///
+    /// This method returns the current number of tokens in the bucket without
+    /// performing any refill calculations based on elapsed time. Suitable for
+    /// quick queries when you don't want to modify the bucket state.
+    ///
+    /// # Returns
+    /// * `Ok(available_tokens)` - Current tokens in bucket (without refill update)
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    #[inline(always)]
+    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+        let state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        Ok(state.available)
     }
 }

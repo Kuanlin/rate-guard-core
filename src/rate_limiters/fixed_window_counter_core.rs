@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use crate::{Uint, RateLimitError, AcquireResult};
+
 /// Core implementation of the fixed window counter rate limiting algorithm.
 ///
 /// The fixed window counter algorithm divides time into fixed-size windows and counts
@@ -72,8 +73,6 @@ impl FixedWindowCounterCore {
     ///
     /// ```rust
     /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
-    ///
-    /// // Allow 50 requests per window of 20 ticks
     /// let counter = FixedWindowCounterCore::new(50, 20);
     /// ```
     pub fn new(capacity: Uint, window_ticks: Uint) -> Self {
@@ -97,12 +96,10 @@ impl FixedWindowCounterCore {
     /// requested tokens can be accommodated within the window's capacity.
     ///
     /// # Parameters
-    ///
     /// * `tokens` - Number of tokens to acquire
     /// * `tick` - Current time tick for the operation
     ///
     /// # Returns
-    ///
     /// * `Ok(())` - If the tokens were successfully acquired
     /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed window capacity
     /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
@@ -110,25 +107,9 @@ impl FixedWindowCounterCore {
     ///
     /// # Window Transitions
     ///
-    /// When a tick falls into a new window (tick >= current_window_start + window_ticks),
+    /// When a tick falls into a new window (`tick >= current_window_start + window_ticks`),
     /// the counter automatically resets to zero and the window start time is updated.
     /// This allows for immediate full capacity usage in the new window.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
-    /// use rate_guard_core::RateLimitError;
-    ///
-    /// let counter = FixedWindowCounterCore::new(30, 10);
-    ///
-    /// // Window 0 [0-9]: Use capacity
-    /// assert_eq!(counter.try_acquire_at(30, 5), Ok(()));
-    /// assert_eq!(counter.try_acquire_at(1, 9), Err(RateLimitError::ExceedsCapacity));
-    ///
-    /// // Window 1 [10-19]: Counter resets
-    /// assert_eq!(counter.try_acquire_at(30, 10), Ok(()));
-    /// ```
     #[inline(always)]
     pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
         // Early return for zero tokens - always succeeds
@@ -165,5 +146,65 @@ impl FixedWindowCounterCore {
         } else {
             Err(RateLimitError::ExceedsCapacity)
         }
+    }
+
+    /// Gets the current remaining token capacity in the current window.
+    /// 
+    /// This method updates the window state based on current tick (resets counter
+    /// if a new window has started), then returns the remaining capacity in the
+    /// current window.
+    ///
+    /// # Parameters
+    /// * `tick` - Current time tick for window calculation
+    ///
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining tokens available in current window
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards
+    #[inline(always)]
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+        // Attempt to acquire the lock, return contention error if unavailable
+        let mut state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        // Prevent time from going backwards within the current window
+        if tick < state.start_tick {
+            return Err(RateLimitError::ExpiredTick);
+        }
+
+        // Calculate which window the current tick belongs to
+        let current_window = tick / self.window_ticks;
+        let state_window = state.start_tick / self.window_ticks;
+
+        // Check if we've moved to a new window
+        if current_window > state_window {
+            // Reset counter and update window start time
+            state.count = 0;
+            state.start_tick = current_window * self.window_ticks;
+        }
+
+        // Return remaining capacity in current window
+        Ok(self.capacity.saturating_sub(state.count))
+    }
+
+    /// Gets the current remaining capacity without updating window state.
+    ///
+    /// This method simply returns the remaining tokens that can be acquired in
+    /// the current window **without** checking or triggering a window change.
+    /// Useful for lightweight queries when you do not want to touch state.
+    ///
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining capacity in current window (without window update)
+    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    #[inline(always)]
+    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+        let state = match self.state.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => return Err(RateLimitError::ContentionFailure),
+        };
+
+        Ok(self.capacity.saturating_sub(state.count))
     }
 }

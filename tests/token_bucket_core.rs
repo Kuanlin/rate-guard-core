@@ -189,3 +189,87 @@ fn test_saturating_operations() {
     // Large time jumps should refill to capacity without overflow
     assert_eq!(bucket.try_acquire_at(Uint::MAX, Uint::MAX), Ok(()));
 }
+
+// Add to tests/token_bucket_core.rs
+
+#[test]
+fn test_capacity_remaining() {
+    let bucket = TokenBucketCore::new(100, 10, 5);
+    
+    // Initial state should be full
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 100);
+    
+    // Use some tokens
+    assert_eq!(bucket.try_acquire_at(30, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 70);
+    
+    // Use more tokens
+    assert_eq!(bucket.try_acquire_at(20, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 50);
+    
+    // Time passes, should refill
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 55); // 50 + 5 = 55
+}
+
+#[test]
+fn test_current_capacity_no_refill() {
+    let bucket = TokenBucketCore::new(100, 10, 5);
+    
+    // Use some tokens
+    assert_eq!(bucket.try_acquire_at(40, 0), Ok(()));
+    
+    // current_capacity should not trigger refill
+    assert_eq!(bucket.current_capacity().unwrap(), 60);
+    
+    // Even after time passes, current_capacity returns same value
+    assert_eq!(bucket.current_capacity().unwrap(), 60);
+    
+    // But capacity_remaining will trigger refill
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 65); // 60 + 5 = 65
+}
+
+#[test]
+fn test_capacity_remaining_expired_tick() {
+    let bucket = TokenBucketCore::new(100, 10, 5);
+    
+    // Establish a time point
+    assert_eq!(bucket.try_acquire_at(10, 20), Ok(()));
+    
+    // Going backwards in time should fail
+    assert_eq!(bucket.capacity_remaining(15), Err(RateLimitError::ExpiredTick));
+    assert_eq!(bucket.capacity_remaining(10), Err(RateLimitError::ExpiredTick));
+}
+
+#[test]
+fn test_capacity_remaining_refill_behavior() {
+    let bucket = TokenBucketCore::new(100, 10, 5);
+    
+    // Use all tokens
+    assert_eq!(bucket.try_acquire_at(100, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 0);
+    
+    // After one refill interval
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 5);
+    
+    // After multiple refill intervals
+    assert_eq!(bucket.capacity_remaining(30).unwrap(), 15); // 0 + 3*5 = 15
+    
+    // Should not exceed capacity
+    assert_eq!(bucket.capacity_remaining(1000).unwrap(), 100);
+}
+
+#[test]
+fn test_current_vs_remaining_consistency() {
+    let bucket = TokenBucketCore::new(100, 10, 5);
+    
+    // Use some tokens
+    assert_eq!(bucket.try_acquire_at(40, 0), Ok(()));
+    
+    // Both should return same value at same tick
+    assert_eq!(bucket.current_capacity().unwrap(), 60);
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 60);
+    
+    // After capacity_remaining triggers refill, current_capacity should reflect the update
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 65);
+    assert_eq!(bucket.current_capacity().unwrap(), 65);
+}

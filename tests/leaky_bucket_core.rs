@@ -150,3 +150,134 @@ fn test_saturating_operations() {
     // Large time jumps should work without overflow
     assert_eq!(bucket.try_acquire_at(1, Uint::MAX), Ok(()));
 }
+
+// Add to tests/leaky_bucket_core.rs
+
+#[test]
+fn test_capacity_remaining() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Initial state should be empty
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 0);
+    
+    // Add some tokens
+    assert_eq!(bucket.try_acquire_at(30, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 30);
+    
+    // Add more tokens
+    assert_eq!(bucket.try_acquire_at(20, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 50);
+    
+    // Time passes, should leak
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 45); // 50 - 5 = 45
+}
+
+#[test]
+fn test_current_capacity_no_leak() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Add some tokens
+    assert_eq!(bucket.try_acquire_at(40, 0), Ok(()));
+    
+    // current_capacity should not trigger leak
+    assert_eq!(bucket.current_capacity().unwrap(), 40);
+    
+    // Even after time passes, current_capacity returns same value
+    assert_eq!(bucket.current_capacity().unwrap(), 40);
+    
+    // But capacity_remaining will trigger leak
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 35); // 40 - 5 = 35
+}
+
+#[test]
+fn test_capacity_remaining_expired_tick() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Establish a time point
+    assert_eq!(bucket.try_acquire_at(10, 20), Ok(()));
+    
+    // Going backwards in time should fail
+    assert_eq!(bucket.capacity_remaining(15), Err(RateLimitError::ExpiredTick));
+    assert_eq!(bucket.capacity_remaining(10), Err(RateLimitError::ExpiredTick));
+}
+
+#[test]
+fn test_capacity_remaining_leak_behavior() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Fill the bucket
+    assert_eq!(bucket.try_acquire_at(100, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 100);
+    
+    // After one leak interval
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 95); // 100 - 5 = 95
+    
+    // After multiple leak intervals
+    assert_eq!(bucket.capacity_remaining(30).unwrap(), 85); // 100 - 3*5 = 85
+    
+    // Should not go below zero
+    assert_eq!(bucket.capacity_remaining(1000).unwrap(), 0);
+}
+
+#[test]
+fn test_current_vs_remaining_consistency() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Add some tokens
+    assert_eq!(bucket.try_acquire_at(40, 0), Ok(()));
+    
+    // Both should return same value at same tick
+    assert_eq!(bucket.current_capacity().unwrap(), 40);
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 40);
+    
+    // After capacity_remaining triggers leak, current_capacity should reflect the update
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 35);
+    assert_eq!(bucket.current_capacity().unwrap(), 35);
+}
+
+#[test]
+fn test_leak_boundary_timing() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Add tokens at tick 5
+    assert_eq!(bucket.try_acquire_at(50, 5), Ok(()));
+    
+    // tick 9: elapsed = 9 - 0 = 9, no leak yet (9 < 10)
+    assert_eq!(bucket.capacity_remaining(9).unwrap(), 50);
+    
+    // tick 10: elapsed = 10 - 0 = 10, exactly one leak interval
+    // remaining = 50 - 5 = 45
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 45);
+    
+    // tick 19: elapsed = 19 - 10 = 9, no leak yet (9 < 10)
+    assert_eq!(bucket.capacity_remaining(19).unwrap(), 45);
+    
+    // tick 20: elapsed = 20 - 10 = 10, another leak occurs
+    // remaining = 45 - 5 = 40
+    assert_eq!(bucket.capacity_remaining(20).unwrap(), 40);
+}
+
+#[test]
+fn test_empty_bucket_leak() {
+    let bucket = LeakyBucketCore::new(100, 10, 5);
+    
+    // Bucket starts empty
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 0);
+    
+    // Leak from empty bucket should remain empty
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 0);
+    assert_eq!(bucket.capacity_remaining(100).unwrap(), 0);
+}
+
+#[test]
+fn test_large_leak_amount() {
+    let bucket = LeakyBucketCore::new(50, 10, 100); // leak_amount > capacity
+    
+    // Fill the bucket
+    assert_eq!(bucket.try_acquire_at(50, 0), Ok(()));
+    assert_eq!(bucket.capacity_remaining(0).unwrap(), 50);
+    
+    // After leak interval, more than capacity would leak (100 > 50)
+    // Due to saturating_sub, remaining becomes 0
+    assert_eq!(bucket.capacity_remaining(10).unwrap(), 0);
+}

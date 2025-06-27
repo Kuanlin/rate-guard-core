@@ -182,3 +182,4 @@ fn test_saturating_operations() {
     assert_eq!(counter.try_acquire_at(500, 0), Ok(()));
     assert_eq!(counter.try_acquire_at(400, 150), Ok(()));
 }
+
