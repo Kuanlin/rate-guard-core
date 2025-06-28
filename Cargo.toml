@@ -17,6 +17,7 @@ categories = [
 ]
 rust-version = "1.60"
 exclude = ["Cargo.toml.orig"]
+
 [dependencies]
 
 [dev-dependencies]
@@ -27,6 +28,7 @@ tick_u64 = []
 tick_u128 = []
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["tick_u64"] 
 rustdoc-args = ["--cfg", "docsrs"]
+
 
