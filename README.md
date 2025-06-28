@@ -15,7 +15,7 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { version = "0.2.1" }
+rate-guard-core = { version = "0.2.2" }
 ```
 
 ## Tick Precision (u64 / u128)
@@ -24,14 +24,14 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 
 ```toml
 [dependencies]
-rate-guard-core = { version = "0.2.1", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { version = "0.2.2", default-features = false, features = ["tick_u128"] }
 ```
 
 ### from Github
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.2.1" }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.2.2" }
 ```
 
 ## Tick Precision (u64 / u128)
@@ -40,7 +40,7 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.2.1", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.2.2", default-features = false, features = ["tick_u128"] }
 ```
 
 ---
