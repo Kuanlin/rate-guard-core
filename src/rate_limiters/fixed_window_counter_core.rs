@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{Uint, RateLimitError, AcquireResult};
+use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, Uint};
 
 /// Core implementation of the fixed window counter rate limiting algorithm.
 ///
@@ -56,6 +56,40 @@ struct FixedWindowCounterCoreState {
     /// Tick when the current window started
     start_tick: Uint,
 }
+
+/// Core trait implementation for the fixed window counter.
+/// This provides the basic operations needed by the rate limiter core trait.
+impl RateLimiterCore for FixedWindowCounterCore {
+    /// Attempts to acquire the specified number of tokens at the given tick.
+    ///
+    /// This method is a wrapper around `try_acquire_at` for convenience.
+    ///
+    /// # Arguments
+    ///
+    /// * `tokens` - Number of tokens to acquire.
+    /// * `tick` - Current time tick.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`AcquireResult`] indicating success or specific failure reason. 
+    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+        self.try_acquire_at(tokens, tick)
+    }
+
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - Current time tick for leak calculation.
+    ///
+    /// # Returns
+    ///
+    /// The number of tokens currently available for acquisition, or 0 if error.
+    fn capacity_remaining(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
+}
+
 
 impl FixedWindowCounterCore {
     /// Creates a new fixed window counter with the specified parameters.

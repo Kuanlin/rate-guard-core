@@ -9,7 +9,7 @@ use crate::AcquireResult;
 ///
 /// Implementors of this trait provide the basic operations needed by any rate limiter.
 /// This allows for consistent use across leaky bucket, token bucket, window counter, and other algorithms.
-pub trait RateLimiterCore {
+pub trait RateLimiterCore: Send + Sync {
     /// Attempts to acquire the specified number of tokens at the given tick.
     ///
     /// # Arguments
