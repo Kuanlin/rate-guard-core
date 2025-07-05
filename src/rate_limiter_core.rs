@@ -1,30 +1,48 @@
 //! Core trait for rate limiter algorithms.
 //!
 //! This module defines the unified trait used by all rate limiter implementations.
+//! It allows consistent use and interchangeability across token bucket, leaky bucket, window counter, and other algorithms.
 
 pub use crate::types::Uint;
-use crate::SimpleAcquireResult;
+use crate::{SimpleAcquireResult, VerboseAcquireResult};
 
-/// The core trait for all rate limiter algorithms.
+/// The core trait implemented by all rate limiter algorithms.
 ///
-/// Implementors of this trait provide the basic operations needed by any rate limiter.
-/// This allows for consistent use across leaky bucket, token bucket, window counter, and other algorithms.
+/// This trait defines the essential operations available on any rate limiter,
+/// supporting both simple and verbose (diagnostic) usage patterns.
 pub trait RateLimiterCore: Send + Sync {
-    /// Attempts to acquire the specified number of tokens at the given tick.
+    /// Attempts to acquire the specified number of tokens at the given tick (fast-path).
+    ///
+    /// Returns immediately with a minimal error type (`SimpleAcquireError`) for best performance.
     ///
     /// # Arguments
-    /// * `tokens` - Number of tokens to acquire
-    /// * `tick` - Current time tick (from the application)
+    /// * `tick` – Current time tick (from the application)
+    /// * `tokens` – Number of tokens to acquire
     ///
     /// # Returns
-    /// * `Ok(())` on success
-    /// * `Err(RateLimitError)` if denied or failed
-    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult;
+    /// * `Ok(())` if the request is allowed
+    /// * `Err(SimpleAcquireError)` if denied or failed
+    fn try_acquire_at(&self, tick: Uint, tokens: Uint) -> SimpleAcquireResult;
 
-    /// Returns the number of tokens that can still be acquired at the given tick.
+    /// Attempts to acquire tokens at the given tick, returning detailed diagnostics (verbose-path).
+    ///
+    /// Returns a verbose error type (`VerboseAcquireError`) that includes additional context, such as
+    /// current available tokens, required wait time, and more. This is useful for async backoff,
+    /// logging, or advanced handling.
     ///
     /// # Arguments
-    /// * `tick` - Current time tick (from the application)
+    /// * `tick` – Current time tick (from the application)
+    /// * `tokens` – Number of tokens to acquire
+    ///
+    /// # Returns
+    /// * `Ok(())` if the request is allowed
+    /// * `Err(VerboseAcquireError)` with detailed info if denied or failed
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult;
+
+    /// Returns the number of tokens currently available at the given tick.
+    ///
+    /// # Arguments
+    /// * `tick` – Current time tick (from the application)
     ///
     /// # Returns
     /// The number of tokens currently available for acquisition.

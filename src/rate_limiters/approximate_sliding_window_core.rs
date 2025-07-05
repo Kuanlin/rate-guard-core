@@ -4,7 +4,7 @@
 //! a two-window approach to efficiently approximate a true sliding window.
 
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
 
 /// Toggles between window indices 0 and 1.
 ///
@@ -101,8 +101,21 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     ///
     /// * `Ok(())` - Tokens successfully acquired
     /// * `Err(SimpleRateLimitError)` - Various error conditions (see `try_acquire_at`)
-    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    fn try_acquire_at(&self, tick: Uint, tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
+    }
+
+    /// Attempts to acquire tokens at the current tick with verbose diagnostics.
+    /// 
+    /// This is a convenience method that calls `try_acquire_verbose_at` with the provided tick.
+    /// # Arguments
+    /// * `tokens` - Number of tokens to acquire
+    /// * `tick` - Current time tick
+    /// # Returns
+    /// * `Ok(())` - Tokens successfully acquired
+    /// * `Err(VerboseRateLimitError)` - Various error conditions with detailed diagnostics
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        self.try_acquire_verbose_at(tick, tokens)
     }
 
     /// Gets the current remaining capacity.
@@ -357,6 +370,70 @@ impl ApproximateSlidingWindowCore {
         } else {
             Err(SimpleRateLimitError::InsufficientCapacity)
         }
+    }
+
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        if tokens == 0 {
+            return Ok(());
+        }
+
+        let mut state = self.state.try_lock()
+            .map_err(|_| VerboseRateLimitError::ContentionFailure)?;
+
+        let max_window_start = state.window_starts[0].max(state.window_starts[1]);
+        if tick < max_window_start {
+            return Err(VerboseRateLimitError::ExpiredTick {
+                min_acceptable_tick: max_window_start,
+            });
+        }
+
+        let capacity = self.capacity;
+        let window_ticks = self.window_ticks;
+
+        if tokens > capacity {
+            return Err(VerboseRateLimitError::BeyondCapacity {
+                acquiring: tokens,
+                capacity,
+            });
+        }
+
+        self.update_windows(&mut state, tick);
+
+        let sw_head = tick.saturating_sub(window_ticks - 1);
+        let sw_end = tick;
+
+        let current_idx = state.current_index;
+        //let other_idx = other_window!(current_idx);
+
+        let active_tokens = state.windows[current_idx];
+        //let active_start = state.window_starts[current_idx];
+
+        // Calculate total contribution using existing core logic
+        let total_contrib = self.calculate_weighted_contribution(&state, sw_head, sw_end);
+        let capacity_contrib = capacity * window_ticks;
+        let required_contrib = tokens * window_ticks;
+
+        if total_contrib <= capacity_contrib.saturating_sub(required_contrib) {
+            state.windows[current_idx] += tokens;
+            return Ok(());
+        }
+
+        let available_contrib = capacity_contrib.saturating_sub(total_contrib);
+        let active_contrib = active_tokens * window_ticks;
+
+        let retry_after_ticks = if required_contrib > capacity_contrib.saturating_sub(active_contrib) {
+            // Must rely on active window to decay after it becomes inactive
+            required_contrib.saturating_sub(capacity_contrib.saturating_sub(active_contrib))
+        } else {
+            // Can rely on decay from the current inactive window
+            required_contrib.saturating_sub(available_contrib)
+        };
+
+        Err(VerboseRateLimitError::InsufficientCapacity {
+            acquiring: tokens,
+            available: available_contrib / window_ticks,
+            retry_after_ticks,
+        })
     }
 
     /// Gets the current remaining token capacity using approximate sliding window calculation.

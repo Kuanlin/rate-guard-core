@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
 
 /// Core implementation of the fixed window counter rate limiting algorithm.
 ///
@@ -76,6 +76,33 @@ impl RateLimiterCore for FixedWindowCounterCore {
         self.try_acquire_at(tick, tokens)
     }
 
+    /// Attempts to acquire tokens at the given tick, returning detailed diagnostics.
+    /// This method provides additional context when a request fails due to rate limiting constraints.
+    /// # Arguments
+    /// * `tick` - Current time tick for the operation
+    /// * `tokens` - Number of tokens to acquire
+    /// # Returns
+    /// Returns [`VerboseAcquireResult`] with detailed information on success or failure.
+    /// This includes current available tokens, required wait time, and more.
+    /// # Example
+    /// ```rust
+    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::VerboseRateLimitError;
+    /// let counter = FixedWindowCounterCore::new(100, 10);
+    /// let tick = 5;
+    /// match counter.try_acquire_verbose_at(tick, 30) {
+    ///    Ok(()) => println!("Request allowed!"),
+    ///   Err(VerboseRateLimitError::InsufficientCapacity { available, retry_after_ticks, .. }) => {
+    ///       println!("Please retry in {} ticks ({} tokens available)", retry_after_ticks, available);
+    ///   },
+    ///   Err(e) => println!("Denied: {}", e),
+    /// }
+    /// ```
+    #[inline(always)]
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        self.try_acquire_verbose_at(tick, tokens)
+    }
+    
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
     ///
     /// # Arguments
@@ -181,6 +208,96 @@ impl FixedWindowCounterCore {
             Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
+
+    /// Attempts to acquire the specified number of tokens at the given tick,
+    /// returning detailed error diagnostics if the request is denied.
+    ///
+    /// This method behaves similarly to `try_acquire_at`, but instead of returning
+    /// a simple error enum, it provides verbose error information including:
+    /// - how many tokens are currently available in the active window
+    /// - how many were requested
+    /// - how many ticks to wait until the window resets (if applicable)
+    ///
+    /// # Behavior
+    /// - Time is divided into fixed windows of size `window_ticks`.
+    /// - Each window has an independent usage counter.
+    /// - If `tick` falls into a new window, the counter resets.
+    /// - If the requested `tokens` would exceed the current window's capacity,
+    ///   the method returns an error with details and suggested retry timing.
+    ///
+    /// # Arguments
+    /// * `tick` – The current logical time tick
+    /// * `tokens` – Number of tokens to acquire
+    ///
+    /// # Returns
+    /// * `Ok(())` – If the tokens were successfully acquired
+    /// * `Err(VerboseRateLimitError::ContentionFailure)` – Lock could not be acquired
+    /// * `Err(VerboseRateLimitError::ExpiredTick)` – Provided tick is older than current window
+    /// * `Err(VerboseRateLimitError::BeyondCapacity)` – Requested tokens exceed the configured capacity
+    /// * `Err(VerboseRateLimitError::InsufficientCapacity)` – Not enough tokens available in current window
+    ///
+    /// # Example
+    /// ```
+    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::VerboseRateLimitError;
+    ///
+    /// let limiter = FixedWindowCounterCore::new(100, 10); // 100 tokens per 10-tick window
+    /// let tick = 5;
+    ///
+    /// match limiter.try_acquire_verbose_at(tick, 120) {
+    ///     Ok(()) => println!("Allowed"),
+    ///     Err(VerboseRateLimitError::InsufficientCapacity { available, retry_after_ticks, .. }) => {
+    ///         println!("Wait {} ticks ({} tokens available)", retry_after_ticks, available);
+    ///     },
+    ///     Err(e) => println!("Denied: {}", e),
+    /// }
+    /// ```
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        if tokens == 0 {
+            return Ok(());
+        }
+
+        let mut state = self.state.try_lock()
+            .map_err(|_| VerboseRateLimitError::ContentionFailure)?;
+
+        if tick < state.start_tick {
+            return Err(VerboseRateLimitError::ExpiredTick {
+                min_acceptable_tick: state.start_tick,
+            });
+        }
+
+        if tokens > self.capacity {
+            return Err(VerboseRateLimitError::BeyondCapacity {
+                acquiring: tokens,
+                capacity: self.capacity,
+            });
+        }
+
+        let current_window = tick / self.window_ticks;
+        let state_window = state.start_tick / self.window_ticks;
+
+        if current_window > state_window {
+            // New window → reset
+            state.count = 0;
+            state.start_tick = current_window * self.window_ticks;
+        }
+
+        if tokens <= self.capacity.saturating_sub(state.count) {
+            state.count += tokens;
+            Ok(())
+        } else {
+            let available = self.capacity.saturating_sub(state.count);
+            let next_window_tick = (current_window + 1) * self.window_ticks;
+            let retry_after_ticks = next_window_tick.saturating_sub(tick);
+
+            Err(VerboseRateLimitError::InsufficientCapacity {
+                acquiring: tokens,
+                available,
+                retry_after_ticks,
+            })
+        }
+    }
+
 
     /// Gets the current remaining token capacity in the current window.
     /// 

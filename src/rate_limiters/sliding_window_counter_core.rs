@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
 
 /// Core implementation of the sliding window counter rate limiting algorithm.
 ///
@@ -81,6 +81,20 @@ impl RateLimiterCore for SlidingWindowCounterCore {
     /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason. 
     fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
+    }
+
+    /// Attempts to acquire tokens at the given tick, returning detailed diagnostics.
+    /// This method is a wrapper around `try_acquire_verbose_at` for convenience.
+    /// # Arguments
+    ///
+    /// * `tokens` - Number of tokens to acquire.
+    /// * `tick` - Current time tick.
+    /// # Returns
+    /// 
+    /// Returns [`VerboseAcquireResult`] with detailed diagnostics or error.
+    /// This includes information like available tokens, retry time, and more.
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        self.try_acquire_verbose_at(tick, tokens)
     }
 
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
@@ -206,6 +220,89 @@ impl SlidingWindowCounterCore {
             Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
+
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        if tokens == 0 {
+            return Ok(());
+        }
+
+        let mut state = self.state.try_lock()
+            .map_err(|_| VerboseRateLimitError::ContentionFailure)?;
+
+        let window_start_tick = tick.saturating_sub(self.window_ticks());
+
+        // Reject if time has gone backwards
+        if state.bucket_start_ticks[state.last_bucket_index] > 0 &&
+            tick < state.bucket_start_ticks[state.last_bucket_index]
+        {
+            return Err(VerboseRateLimitError::ExpiredTick {
+                min_acceptable_tick: state.bucket_start_ticks[state.last_bucket_index],
+            });
+        }
+
+        // Reject if acquiring more than capacity
+        if tokens > self.capacity {
+            return Err(VerboseRateLimitError::BeyondCapacity {
+                acquiring: tokens,
+                capacity: self.capacity,
+            });
+        }
+
+        // Determine current bucket index
+        let bucket_ticks = self.bucket_ticks;
+        let bucket_count = self.bucket_count as usize;
+        let current_bucket_idx = ((tick / bucket_ticks) % self.bucket_count as Uint) as usize;
+        let current_bucket_start_tick = (tick / bucket_ticks) * bucket_ticks;
+
+        // Reset current bucket if entering new time slot
+        if state.bucket_start_ticks[current_bucket_idx] != current_bucket_start_tick {
+            state.buckets[current_bucket_idx] = 0;
+            state.bucket_start_ticks[current_bucket_idx] = current_bucket_start_tick;
+        }
+
+        state.last_bucket_index = current_bucket_idx;
+
+        // ----- Phase 1: calculate total used tokens in current window -----
+        let mut total_used = 0;
+        let mut valid_indices = Vec::with_capacity(bucket_count);
+
+        for i in 0..bucket_count {
+            let idx = i;
+            let ts = state.bucket_start_ticks[idx];
+            if ts >= window_start_tick && ts <= tick {
+                total_used += state.buckets[idx];
+                valid_indices.push(idx);
+            }
+        }
+
+        let available = self.capacity.saturating_sub(total_used);
+
+        if tokens <= available {
+            state.buckets[current_bucket_idx] += tokens;
+            return Ok(());
+        }
+
+        // ----- Phase 2: simulate expiration to estimate retry -----
+        let mut released = 0;
+        let mut retry_after_ticks = self.window_ticks(); // fallback to full window
+
+        for (i, &idx) in valid_indices.iter().enumerate() {
+            released += state.buckets[idx];
+
+            let remaining = available + released;
+            if remaining >= tokens {
+                retry_after_ticks = ((i + 1) as Uint) * bucket_ticks;
+                break;
+            }
+        }
+
+        Err(VerboseRateLimitError::InsufficientCapacity {
+            acquiring: tokens,
+            available,
+            retry_after_ticks,
+        })
+    }
+
 
     /// Counts the total number of tokens currently present in valid buckets
     /// within the sliding window defined by `window_start_tick` and `tick`.

@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{Uint, SimpleRateLimitError, SimpleAcquireResult};
+use crate::{SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
 use crate::rate_limiter_core::RateLimiterCore;
 
 /// Core implementation of the token bucket rate limiting algorithm.
@@ -66,6 +66,34 @@ impl RateLimiterCore for TokenBucketCore {
     /// Returns [`SimpleAcquireResult`] indicating success or error type.
     fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
+    }
+    /// Attempts to acquire tokens at the given tick, returning detailed diagnostics.
+    /// 
+    /// This method is a wrapper that calls the main `try_acquire_verbose_at` logic.
+    ///    
+    /// # Arguments
+    /// * `tick` - Current time tick
+    /// * `tokens` - Number of tokens to acquire
+    /// # Returns
+    /// Returns [`VerboseAcquireResult`] indicating success or error type.
+    /// 
+    /// # Example
+    /// ```rust
+    /// use rate_guard_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::VerboseRateLimitError;
+    /// let bucket = TokenBucketCore::new(100, 10, 5);
+    /// let tick = 20;
+    /// match bucket.try_acquire_verbose_at(tick, 30) {
+    ///     Ok(()) => println!("Request allowed!"),
+    ///     Err(VerboseRateLimitError::InsufficientCapacity { available, retry_after_ticks, .. }) => {
+    ///         println!("Please retry in {} ticks ({} tokens available)", retry_after_ticks, available);
+    ///     },
+    ///     Err(e) => println!("Denied: {}", e),
+    /// }
+    ///```
+    #[inline(always)]
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        self.try_acquire_verbose_at(tick, tokens)
     }
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
     ///
@@ -167,6 +195,99 @@ impl TokenBucketCore {
             Ok(())
         } else {
             Err(SimpleRateLimitError::InsufficientCapacity)
+        }
+    }
+
+    /// Attempts to acquire the specified number of tokens at the given tick,
+    /// returning detailed diagnostics on failure.
+    ///
+    /// This verbose version of the rate limiter provides additional context when a request
+    /// fails due to rate limiting constraints. Unlike the fast-path `try_acquire_at`,
+    /// which returns a minimal error enum, this method returns rich information
+    /// that can be used for logging, backoff timing, or user feedback.
+    ///
+    /// # Behavior
+    /// - Tokens are added to the bucket based on the elapsed time since the last refill.
+    /// - If sufficient tokens are available, the request is allowed and tokens are deducted.
+    /// - If not enough tokens are available, an error is returned with a recommended
+    ///   number of ticks to wait before retrying.
+    /// - If the requested tokens permanently exceed the configured capacity,
+    ///   a `BeyondCapacity` error is returned.
+    ///
+    /// # Arguments
+    /// * `tick` – The current logical time tick (e.g., milliseconds since app start)
+    /// * `tokens` – The number of tokens to acquire
+    ///
+    /// # Returns
+    /// * `Ok(())` – If the tokens were successfully acquired
+    /// * `Err(VerboseRateLimitError::ContentionFailure)` – If lock acquisition failed
+    /// * `Err(VerboseRateLimitError::ExpiredTick)` – If the provided tick is older than the last refill
+    /// * `Err(VerboseRateLimitError::BeyondCapacity)` – If the requested amount exceeds the bucket's max capacity
+    /// * `Err(VerboseRateLimitError::InsufficientCapacity)` – If not enough tokens are currently available,
+    ///     includes how many are available and how long to wait (in ticks) before retrying.
+    ///
+    /// # Example
+    /// ```
+    /// use rate_guard_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::VerboseRateLimitError;
+    ///
+    /// let bucket = TokenBucketCore::new(100, 10, 5);
+    /// let tick = 20;
+    ///
+    /// match bucket.try_acquire_verbose_at(tick, 30) {
+    ///     Ok(()) => println!("Request allowed!"),
+    ///     Err(VerboseRateLimitError::InsufficientCapacity { available, retry_after_ticks, .. }) => {
+    ///         println!("Please retry in {} ticks ({} tokens available)", retry_after_ticks, available);
+    ///     },
+    ///     Err(e) => println!("Denied: {}", e),
+    /// }
+    /// ```
+    #[inline(always)]
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        if tokens == 0 {
+            return Ok(());
+        }
+
+        let mut state = self.state.try_lock()
+            .map_err(|_| VerboseRateLimitError::ContentionFailure)?;
+
+        if tick < state.last_refill_tick {
+            return Err(VerboseRateLimitError::ExpiredTick {
+                min_acceptable_tick: state.last_refill_tick,
+            });
+        }
+
+        if tokens > self.capacity {
+            return Err(VerboseRateLimitError::BeyondCapacity {
+                acquiring: tokens,
+                capacity: self.capacity,
+            });
+        }
+
+        let elapsed_ticks = tick - state.last_refill_tick;
+        let refill_times = elapsed_ticks / self.refill_interval;
+        let total_refilled = refill_times.saturating_mul(self.refill_amount);
+
+        state.available = (state.available + total_refilled).min(self.capacity);
+
+        if refill_times > 0 {
+            state.last_refill_tick += refill_times * self.refill_interval;
+        }
+
+        if tokens <= state.available {
+            state.available -= tokens;
+            Ok(())
+        } else {
+            let needed_tokens = tokens - state.available;
+            let refill_per_tick = self.refill_amount;
+            let retry_after_ticks = self.refill_interval
+                .saturating_mul((needed_tokens + refill_per_tick - 1) / refill_per_tick);
+
+            Err(VerboseRateLimitError::InsufficientCapacity {
+                acquiring: tokens,
+                available: state.available,
+                retry_after_ticks,
+            })
         }
     }
 

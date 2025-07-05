@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
 
 /// Core implementation of the leaky bucket rate limiting algorithm.
 ///
@@ -83,6 +83,27 @@ impl RateLimiterCore for LeakyBucketCore {
     fn capacity_remaining(&self, tick: Uint) -> Uint {
         self.capacity_remaining(tick).unwrap_or(0)
     }
+
+    /// Attempts to acquire tokens at the given tick, returning detailed diagnostics.
+    /// This method is a wrapper around `try_acquire_verbose_at` for convenience.
+    /// # Arguments
+    /// * `tick` - Current time tick.
+    /// * `tokens` - Number of tokens to acquire.
+    /// # Returns
+    /// Returns [`VerboseAcquireResult`] indicating success or specific failure reason with diagnostics.
+    ///    
+    /// # Example
+    /// ```rust
+    /// use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// let bucket = LeakyBucketCore::new(100, 10, 5);
+    /// let result = bucket.try_acquire_verbose_at(0, 30);
+    /// if let Err(e) = result {
+    ///     println!("Failed to acquire tokens: {}", e); 
+    /// }
+    /// ```
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        self.try_acquire_verbose_at(tick, tokens)
+    }
 }
 
 impl LeakyBucketCore {
@@ -138,6 +159,7 @@ impl LeakyBucketCore {
     /// * `Ok(())` - If the tokens were successfully acquired.
     /// * `Err(SimpleRateLimitError::InsufficientCapacity)` - If acquiring would exceed bucket capacity.
     /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock.
+    /// * `Err(SimpleRateLimitError::BeyondCapacity)` - if the requested tokens exceed maximum capacity
     /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the last operation.
     #[inline(always)]
     pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
@@ -155,6 +177,12 @@ impl LeakyBucketCore {
         // Prevent time from going backwards
         if tick < state.last_leak_tick {
             return Err(SimpleRateLimitError::ExpiredTick);
+        }
+
+        // Check if requested tokens exceed capacity
+        // This is a fast-path check to avoid unnecessary calculations
+        if tokens > self.capacity {
+            return Err(SimpleRateLimitError::BeyondCapacity);
         }
 
         // Calculate how much should leak based on elapsed time
@@ -177,6 +205,75 @@ impl LeakyBucketCore {
             Ok(())
         } else {
             Err(SimpleRateLimitError::InsufficientCapacity)
+        }
+    }
+
+    /// Attempts to acquire the specified number of tokens at the given tick
+    /// with detailed diagnostic information on failure.
+    ///
+    /// This method performs the same rate-limiting check as `try_acquire_at`,
+    /// but returns verbose error types that include contextual information such as:
+    /// - how many tokens were requested
+    /// - how many tokens were available
+    /// - how long to wait before retrying
+    ///
+    /// # Arguments
+    /// * `tick` - The current logical time tick
+    /// * `tokens` - The number of tokens to acquire
+    ///
+    /// # Returns
+    /// * `Ok(())` - if the tokens were successfully acquired
+    /// * `Err(VerboseRateLimitError::ContentionFailure)` - if lock acquisition failed
+    /// * `Err(VerboseRateLimitError::ExpiredTick)` - if the tick is older than the last operation
+    /// * `Err(VerboseRateLimitError::BeyondCapacity)` - if the requested tokens exceed maximum capacity
+    /// * `Err(VerboseRateLimitError::InsufficientCapacity)` - if not enough capacity is available
+    #[inline(always)]
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+        if tokens == 0 {
+            return Ok(());
+        }
+
+        // Attempt to acquire the lock, return contention error if unavailable
+        // This ensures thread safety
+        let mut state = self.state.try_lock()
+            .map_err(|_| VerboseRateLimitError::ContentionFailure)?;
+
+        
+        if tick < state.last_leak_tick {
+            return Err(VerboseRateLimitError::ExpiredTick {
+                min_acceptable_tick: state.last_leak_tick,
+            });
+        }
+
+        // Fast-path check for capacity
+        // This avoids unnecessary calculations if the request exceeds maximum capacity
+        if tokens > self.capacity {
+            return Err(VerboseRateLimitError::BeyondCapacity {
+                acquiring: tokens,
+                capacity: self.capacity,
+            });
+        }
+
+        let elapsed_ticks = tick - state.last_leak_tick;
+        let leak_times = elapsed_ticks / self.leak_interval;
+        let total_leaked = leak_times.saturating_mul(self.leak_amount);
+        state.remaining = state.remaining.saturating_sub(total_leaked);
+
+        if leak_times > 0 {
+            state.last_leak_tick += leak_times * self.leak_interval;
+        }
+
+        if tokens <= self.capacity.saturating_sub(state.remaining) {
+            state.remaining += tokens;
+            Ok(())
+        } else {
+            let retry_after_ticks = self.leak_interval
+                .saturating_mul((tokens + state.remaining - self.capacity + self.leak_amount - 1) / self.leak_amount);
+            Err(VerboseRateLimitError::InsufficientCapacity {
+                acquiring: tokens,
+                available: self.capacity.saturating_sub(state.remaining),
+                retry_after_ticks,
+            })
         }
     }
 
