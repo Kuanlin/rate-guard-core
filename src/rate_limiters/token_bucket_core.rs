@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{Uint, RateLimitError, AcquireResult};
+use crate::{Uint, SimpleRateLimitError, SimpleAcquireResult};
 use crate::rate_limiter_core::RateLimiterCore;
 
 /// Core implementation of the token bucket rate limiting algorithm.
@@ -26,13 +26,13 @@ use crate::rate_limiter_core::RateLimiterCore;
 /// let bucket = TokenBucketCore::new(100, 10, 5);
 ///
 /// // Use all initial tokens
-/// assert_eq!(bucket.try_acquire_at(100, 0), Ok(()));
+/// assert_eq!(bucket.try_acquire_at(0, 100), Ok(()));
 ///
 /// // Should fail - no tokens left
-/// assert!(bucket.try_acquire_at(1, 0).is_err());
+/// assert!(bucket.try_acquire_at(0, 1).is_err());
 ///
 /// // After refill interval, 5 tokens are added
-/// assert_eq!(bucket.try_acquire_at(5, 10), Ok(()));
+/// assert_eq!(bucket.try_acquire_at(10, 5), Ok(()));
 /// ```
 pub struct TokenBucketCore {
     /// Maximum number of tokens the bucket can hold
@@ -63,9 +63,9 @@ impl RateLimiterCore for TokenBucketCore {
     /// * `tick` - Current time tick
     ///
     /// # Returns
-    /// Returns [`AcquireResult`] indicating success or error type.
-    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
-        self.try_acquire_at(tokens, tick)
+    /// Returns [`SimpleAcquireResult`] indicating success or error type.
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+        self.try_acquire_at(tick, tokens)
     }
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
     ///
@@ -127,11 +127,11 @@ impl TokenBucketCore {
     ///
     /// # Returns
     /// * `Ok(())` - If the tokens were successfully acquired
-    /// * `Err(RateLimitError::ExceedsCapacity)` - If insufficient tokens are available
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the last operation
+    /// * `Err(SimpleRateLimitError::InsufficientCapacity)` - If insufficient tokens are available
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the last operation
     #[inline(always)]
-    pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -140,12 +140,12 @@ impl TokenBucketCore {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards
         if tick < state.last_refill_tick {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Calculate how many tokens should be added based on elapsed time
@@ -166,7 +166,7 @@ impl TokenBucketCore {
             state.available -= tokens;
             Ok(())
         } else {
-            Err(RateLimitError::ExceedsCapacity)
+            Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
 
@@ -180,19 +180,19 @@ impl TokenBucketCore {
     ///
     /// # Returns
     /// * `Ok(available_tokens)` - Current number of available tokens
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards
     #[inline(always)]
-    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards
         if tick < state.last_refill_tick {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Calculate how many tokens should be added based on elapsed time
@@ -220,12 +220,12 @@ impl TokenBucketCore {
     ///
     /// # Returns
     /// * `Ok(available_tokens)` - Current tokens in bucket (without refill update)
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
     #[inline(always)]
-    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity(&self) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         Ok(state.available)

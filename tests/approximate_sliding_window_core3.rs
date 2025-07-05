@@ -1,6 +1,6 @@
 
 use rate_guard_core::rate_limiter_core::RateLimiterCore;
-use rate_guard_core::{RateLimitError, Uint};
+use rate_guard_core::{SimpleRateLimitError, Uint};
 use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
 
 // Helper function to create a boxed trait object
@@ -13,13 +13,13 @@ fn test_trait_try_acquire_at_basic() {
     let limiter: Box<dyn RateLimiterCore> = create_rate_limiter(100, 10);
     
     // Test successful acquisition through trait
-    assert_eq!(limiter.try_acquire_at(50, 5), Ok(()));
-    assert_eq!(limiter.try_acquire_at(30, 8), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 50), Ok(()));
+    assert_eq!(limiter.try_acquire_at(8, 30), Ok(()));
     
     // Test exceeding capacity through trait
     assert_eq!(
-        limiter.try_acquire_at(30, 9),
-        Err(RateLimitError::ExceedsCapacity)
+        limiter.try_acquire_at(9, 30),
+        Err(SimpleRateLimitError::InsufficientCapacity)
     );
 }
 
@@ -31,7 +31,7 @@ fn test_trait_capacity_remaining_basic() {
     assert_eq!(limiter.capacity_remaining(0), 100);
     
     // After using some tokens through trait
-    assert_eq!(limiter.try_acquire_at(30, 5), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 30), Ok(()));
     assert_eq!(limiter.capacity_remaining(5), 70);
 }
 
@@ -41,7 +41,7 @@ fn test_trait_zero_tokens() {
     
     // Zero tokens should always succeed through trait
     assert_eq!(limiter.try_acquire_at(0, 0), Ok(()));
-    assert_eq!(limiter.try_acquire_at(0, 100), Ok(()));
+    assert_eq!(limiter.try_acquire_at(100, 0), Ok(()));
 }
 
 #[test]
@@ -49,11 +49,11 @@ fn test_trait_sliding_window_behavior() {
     let limiter: Box<dyn RateLimiterCore> = create_rate_limiter(100, 10);
     
     // Fill up first window through trait
-    assert_eq!(limiter.try_acquire_at(80, 5), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 80), Ok(()));
     assert_eq!(limiter.capacity_remaining(5), 20);
     
     // Move to second window - should be able to acquire more through trait
-    assert_eq!(limiter.try_acquire_at(60, 15), Ok(()));
+    assert_eq!(limiter.try_acquire_at(15, 60), Ok(()));
     
     // Capacity should be affected by sliding window through trait
     let remaining = limiter.capacity_remaining(15);
@@ -66,12 +66,12 @@ fn test_trait_expired_tick() {
     let limiter: Box<dyn RateLimiterCore> = create_rate_limiter(100, 10);
     
     // Advance time through trait
-    assert_eq!(limiter.try_acquire_at(50, 20), Ok(()));
+    assert_eq!(limiter.try_acquire_at(20, 50), Ok(()));
     
     // Try to use an earlier tick through trait - should fail
     assert_eq!(
-        limiter.try_acquire_at(10, 15),
-        Err(RateLimitError::ExpiredTick)
+        limiter.try_acquire_at(15, 10),
+        Err(SimpleRateLimitError::ExpiredTick)
     );
 }
 
@@ -102,12 +102,12 @@ fn test_trait_polymorphism() {
     
     for limiter in limiters {
         // Test basic functionality through trait interface
-        assert_eq!(limiter.try_acquire_at(10, 1), Ok(()));
+        assert_eq!(limiter.try_acquire_at(1, 10), Ok(()));
         let remaining = limiter.capacity_remaining(1);
         assert!(remaining > 0, "Should have remaining capacity");
         
         // Test zero tokens through trait
-        assert_eq!(limiter.try_acquire_at(0, 2), Ok(()));
+        assert_eq!(limiter.try_acquire_at(2, 0), Ok(()));
     }
 }
 
@@ -116,14 +116,14 @@ fn test_trait_window_transitions() {
     let limiter: Box<dyn RateLimiterCore> = create_rate_limiter(100, 10);
     
     // Window 0: ticks 0-9 through trait
-    assert_eq!(limiter.try_acquire_at(50, 5), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 50), Ok(()));
     assert_eq!(limiter.capacity_remaining(9), 50);
     
     // Window 1: ticks 10-19 through trait
-    assert_eq!(limiter.try_acquire_at(40, 15), Ok(()));
+    assert_eq!(limiter.try_acquire_at(15, 40), Ok(()));
     
     // Window 0 again: ticks 20-29 through trait
-    assert_eq!(limiter.try_acquire_at(30, 25), Ok(()));
+    assert_eq!(limiter.try_acquire_at(25, 30), Ok(()));
     
     // Verify capacity calculations work across window transitions through trait
     let remaining = limiter.capacity_remaining(25);
@@ -140,7 +140,7 @@ fn test_trait_consistency() {
     
     // Acquire some tokens through trait
     let tokens_to_acquire = 30;
-    assert_eq!(limiter.try_acquire_at(tokens_to_acquire, 10), Ok(()));
+    assert_eq!(limiter.try_acquire_at(10, tokens_to_acquire), Ok(()));
     
     // Check that capacity decreased appropriately through trait
     let remaining_capacity = limiter.capacity_remaining(10);
@@ -152,13 +152,13 @@ fn test_trait_full_capacity() {
     let limiter: Box<dyn RateLimiterCore> = create_rate_limiter(50, 5);
     
     // Fill to exactly capacity through trait
-    assert_eq!(limiter.try_acquire_at(50, 2), Ok(()));
+    assert_eq!(limiter.try_acquire_at(2, 50), Ok(()));
     assert_eq!(limiter.capacity_remaining(2), 0);
     
     // Should not be able to acquire more through trait
     assert_eq!(
-        limiter.try_acquire_at(1, 3),
-        Err(RateLimitError::ExceedsCapacity)
+        limiter.try_acquire_at(3, 1),
+        Err(SimpleRateLimitError::InsufficientCapacity)
     );
 }
 
@@ -167,7 +167,7 @@ fn test_trait_edge_cases() {
     let limiter: Box<dyn RateLimiterCore> = create_rate_limiter(1, 1);
     
     // Very small capacity and window through trait
-    assert_eq!(limiter.try_acquire_at(1, 0), Ok(()));
+    assert_eq!(limiter.try_acquire_at(0, 1), Ok(()));
     assert_eq!(limiter.capacity_remaining(0), 0);
     
     // Next tick should allow acquisition again through trait
@@ -178,7 +178,7 @@ fn test_trait_edge_cases() {
 // Test using generic function with trait bound
 fn test_rate_limiter_generic<T: RateLimiterCore>(limiter: &T, capacity: Uint) {
     // Test through generic trait bound
-    assert_eq!(limiter.try_acquire_at(10, 1), Ok(()));
+    assert_eq!(limiter.try_acquire_at(1, 10), Ok(()));
     let remaining = limiter.capacity_remaining(1);
     assert_eq!(remaining, capacity - 10);
 }
@@ -201,11 +201,11 @@ fn test_trait_object_contexts() {
     let limiter: &dyn RateLimiterCore = &ApproximateSlidingWindowCore::new(50, 10);
     
     // Test through reference to trait object
-    assert_eq!(limiter.try_acquire_at(20, 5), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 20), Ok(()));
     assert_eq!(limiter.capacity_remaining(5), 30);
     
     // Test moving trait object
     let boxed: Box<dyn RateLimiterCore> = Box::new(ApproximateSlidingWindowCore::new(75, 15));
-    assert_eq!(boxed.try_acquire_at(25, 3), Ok(()));
+    assert_eq!(boxed.try_acquire_at(3, 25), Ok(()));
     assert_eq!(boxed.capacity_remaining(3), 50);
 }

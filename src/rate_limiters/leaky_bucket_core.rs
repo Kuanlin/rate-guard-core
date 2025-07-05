@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
 
 /// Core implementation of the leaky bucket rate limiting algorithm.
 ///
@@ -24,16 +24,16 @@ use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, U
 /// let bucket = LeakyBucketCore::new(100, 10, 5);
 ///
 /// // Try to acquire 30 tokens at tick 0
-/// assert_eq!(bucket.try_acquire_at(30, 0), Ok(()));
+/// assert_eq!(bucket.try_acquire_at(0, 30), Ok(()));
 ///
 /// // Fill the bucket completely
-/// assert_eq!(bucket.try_acquire_at(70, 0), Ok(()));
+/// assert_eq!(bucket.try_acquire_at(0, 70), Ok(()));
 ///
 /// // This should fail as bucket is full
-/// assert!(bucket.try_acquire_at(1, 0).is_err());
+/// assert!(bucket.try_acquire_at(0, 1).is_err());
 ///
 /// // Wait for leak interval and try again
-/// assert_eq!(bucket.try_acquire_at(5, 10), Ok(())); // 5 tokens leaked out
+/// assert_eq!(bucket.try_acquire_at(10, 5), Ok(())); // 5 tokens leaked out
 /// ```
 pub struct LeakyBucketCore {
     /// Maximum number of tokens the bucket can hold.
@@ -66,9 +66,9 @@ impl RateLimiterCore for LeakyBucketCore {
     ///
     /// # Returns
     ///
-    /// Returns [`AcquireResult`] indicating success or specific failure reason.
-    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
-        self.try_acquire_at(tokens, tick)
+    /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason.
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+        self.try_acquire_at(tick, tokens)
     }
 
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
@@ -136,11 +136,11 @@ impl LeakyBucketCore {
     /// # Returns
     ///
     /// * `Ok(())` - If the tokens were successfully acquired.
-    /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed bucket capacity.
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock.
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the last operation.
+    /// * `Err(SimpleRateLimitError::InsufficientCapacity)` - If acquiring would exceed bucket capacity.
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock.
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the last operation.
     #[inline(always)]
-    pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -149,12 +149,12 @@ impl LeakyBucketCore {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards
         if tick < state.last_leak_tick {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Calculate how much should leak based on elapsed time
@@ -176,7 +176,7 @@ impl LeakyBucketCore {
             state.remaining += tokens;
             Ok(())
         } else {
-            Err(RateLimitError::ExceedsCapacity)
+            Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
 
@@ -192,17 +192,17 @@ impl LeakyBucketCore {
     /// # Returns
     ///
     /// * `Ok(remaining_tokens)` - Current number of tokens in bucket.
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock.
-    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards.
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock.
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards.
     #[inline(always)]
-    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         if tick < state.last_leak_tick {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         let elapsed_ticks = tick - state.last_leak_tick;
@@ -227,12 +227,12 @@ impl LeakyBucketCore {
     /// # Returns
     ///
     /// * `Ok(remaining_tokens)` - Current tokens in bucket (without leak update).
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock.
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock.
     #[inline(always)]
-    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity(&self) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         Ok(state.remaining)

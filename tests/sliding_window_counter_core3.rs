@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rate_guard_core::{RateLimitError, AcquireResult};
+use rate_guard_core::{SimpleRateLimitError, SimpleAcquireResult};
 use rate_guard_core::rate_limiter_core::RateLimiterCore;
 use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
 
@@ -19,14 +19,14 @@ fn test_rate_limiter_core_sliding_basics() {
     assert_eq!(limiter.capacity_remaining(0), 100);
     
     // Use tokens across different buckets
-    assert_eq!(limiter.try_acquire_at(25, 0), Ok(()));   // bucket 0 [0-4]
-    assert_eq!(limiter.try_acquire_at(25, 5), Ok(()));   // bucket 1 [5-9]
-    assert_eq!(limiter.try_acquire_at(25, 10), Ok(()));  // bucket 2 [10-14]
-    assert_eq!(limiter.try_acquire_at(25, 15), Ok(()));  // bucket 3 [15-19]
+    assert_eq!(limiter.try_acquire_at(0, 25), Ok(()));   // bucket 0 [0-4]
+    assert_eq!(limiter.try_acquire_at(5, 25), Ok(()));   // bucket 1 [5-9]
+    assert_eq!(limiter.try_acquire_at(10, 25), Ok(()));  // bucket 2 [10-14]
+    assert_eq!(limiter.try_acquire_at(15, 25), Ok(()));  // bucket 3 [15-19]
     
     // Window is full
     assert_eq!(limiter.capacity_remaining(15), 0);
-    assert_eq!(limiter.try_acquire_at(1, 15), Err(RateLimitError::ExceedsCapacity));
+    assert_eq!(limiter.try_acquire_at(15, 1), Err(SimpleRateLimitError::InsufficientCapacity));
 }
 
 #[test]
@@ -35,11 +35,11 @@ fn test_rate_limiter_core_sliding_expiry() {
     let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(100, 10, 3);
     
     // Fill bucket 0 [0-9]
-    assert_eq!(limiter.try_acquire_at(40, 5), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 40), Ok(()));
     assert_eq!(limiter.capacity_remaining(5), 60);
     
     // Fill bucket 1 [10-19]
-    assert_eq!(limiter.try_acquire_at(30, 15), Ok(()));
+    assert_eq!(limiter.try_acquire_at(15, 30), Ok(()));
     assert_eq!(limiter.capacity_remaining(15), 30);
     
     // At tick 35, sliding window is [5, 35] (35.saturating_sub(30) = 5)
@@ -50,7 +50,7 @@ fn test_rate_limiter_core_sliding_expiry() {
     assert_eq!(limiter.capacity_remaining(35), 70); // Only bucket 1 counts
     
     // Can use freed capacity
-    assert_eq!(limiter.try_acquire_at(70, 35), Ok(()));
+    assert_eq!(limiter.try_acquire_at(35, 70), Ok(()));
     assert_eq!(limiter.capacity_remaining(35), 0);
 }
 
@@ -60,10 +60,10 @@ fn test_rate_limiter_core_bucket_rotation() {
     let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(80, 5, 2);
     
     // Bucket 0 [0-4]
-    assert_eq!(limiter.try_acquire_at(30, 2), Ok(()));
+    assert_eq!(limiter.try_acquire_at(2, 30), Ok(()));
     
     // Bucket 1 [5-9]  
-    assert_eq!(limiter.try_acquire_at(40, 7), Ok(()));
+    assert_eq!(limiter.try_acquire_at(7, 40), Ok(()));
     assert_eq!(limiter.capacity_remaining(9), 10); // 80 - 30 - 40 = 10
     
     // At tick 10: bucket 0 resets, gets 10 tokens
@@ -81,10 +81,10 @@ fn test_rate_limiter_core_precise_window() {
     let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(60, 3, 4);
     
     // Distribute tokens across buckets
-    assert_eq!(limiter.try_acquire_at(15, 1), Ok(()));   // bucket 0 [0-2]
-    assert_eq!(limiter.try_acquire_at(15, 4), Ok(()));   // bucket 1 [3-5]
-    assert_eq!(limiter.try_acquire_at(15, 7), Ok(()));   // bucket 2 [6-8]
-    assert_eq!(limiter.try_acquire_at(15, 10), Ok(()));  // bucket 3 [9-11]
+    assert_eq!(limiter.try_acquire_at(1, 15), Ok(()));   // bucket 0 [0-2]
+    assert_eq!(limiter.try_acquire_at(4, 15), Ok(()));   // bucket 1 [3-5]
+    assert_eq!(limiter.try_acquire_at(7, 15), Ok(()));   // bucket 2 [6-8]
+    assert_eq!(limiter.try_acquire_at(10, 15), Ok(()));  // bucket 3 [9-11]
     
 
     // At tick 12:
@@ -121,11 +121,11 @@ fn test_rate_limiter_core_time_consistency() {
     assert_eq!(limiter.try_acquire_at(20, 20), Ok(()));
     
     // Going backwards should fail
-    let result: AcquireResult = limiter.try_acquire_at(10, 15);
-    assert_eq!(result, Err(RateLimitError::ExpiredTick));
+    let result: SimpleAcquireResult = limiter.try_acquire_at(15, 10);
+    assert_eq!(result, Err(SimpleRateLimitError::ExpiredTick));
     
     // Current time ok
-    assert_eq!(limiter.try_acquire_at(10, 20), Ok(()));
+    assert_eq!(limiter.try_acquire_at(20, 10), Ok(()));
 }
 
 #[test]
@@ -134,8 +134,8 @@ fn test_rate_limiter_core_zero_operations() {
     
     // Zero token requests always succeed
     assert_eq!(limiter.try_acquire_at(0, 0), Ok(()));
-    assert_eq!(limiter.try_acquire_at(0, 25), Ok(()));
-    assert_eq!(limiter.try_acquire_at(0, 100), Ok(()));
+    assert_eq!(limiter.try_acquire_at(25, 0), Ok(()));
+    assert_eq!(limiter.try_acquire_at(100, 0), Ok(()));
     
     // Capacity unchanged
     assert_eq!(limiter.capacity_remaining(100), 100);
@@ -147,12 +147,12 @@ fn test_rate_limiter_core_single_bucket_config() {
     let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(50, 10, 1);
     
     // Fill the bucket
-    assert_eq!(limiter.try_acquire_at(50, 5), Ok(()));
+    assert_eq!(limiter.try_acquire_at(5, 50), Ok(()));
     assert_eq!(limiter.capacity_remaining(8), 0);
     
     // New cycle at tick 10, old bucket expires
     assert_eq!(limiter.capacity_remaining(15), 50);
-    assert_eq!(limiter.try_acquire_at(30, 18), Ok(()));
+    assert_eq!(limiter.try_acquire_at(18, 30), Ok(()));
     
     // Another cycle at tick 20
     assert_eq!(limiter.capacity_remaining(25), 50);
@@ -173,7 +173,7 @@ fn test_rate_limiter_core_concurrent_buckets() {
         let limiter_clone = limiter.clone();
         let handle = thread::spawn(move || {
             let tick = i * 5 + 2; // Spread across buckets
-            limiter_clone.try_acquire_at(30, tick)
+            limiter_clone.try_acquire_at(tick, 30)
         });
         handles.push(handle);
     }
@@ -206,7 +206,7 @@ fn test_rate_limiter_core_bucket_granularity() {
         assert_eq!(limiter.capacity_remaining(0), capacity);
         
         // Use half capacity
-        assert_eq!(limiter.try_acquire_at(capacity / 2, 0), Ok(()));
+        assert_eq!(limiter.try_acquire_at(0, capacity / 2), Ok(()));
         
         // Jump past window - should have full capacity again
         assert_eq!(limiter.capacity_remaining(window_size + 1), capacity);
@@ -218,18 +218,18 @@ fn test_rate_limiter_core_interface_consistency() {
     let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(90, 6, 3);
     
     // Use tokens across window
-    assert_eq!(limiter.try_acquire_at(20, 2), Ok(()));   // bucket 0
-    assert_eq!(limiter.try_acquire_at(30, 8), Ok(()));   // bucket 1
-    assert_eq!(limiter.try_acquire_at(25, 14), Ok(()));  // bucket 2
+    assert_eq!(limiter.try_acquire_at(2, 20), Ok(()));   // bucket 0
+    assert_eq!(limiter.try_acquire_at(8, 30), Ok(()));   // bucket 1
+    assert_eq!(limiter.try_acquire_at(14, 25), Ok(()));  // bucket 2
     
     assert_eq!(limiter.capacity_remaining(14), 15); // 90 - 75 = 15
     
     // Use exact remaining
-    assert_eq!(limiter.try_acquire_at(15, 14), Ok(()));
+    assert_eq!(limiter.try_acquire_at(14, 15), Ok(()));
     assert_eq!(limiter.capacity_remaining(14), 0);
     
     // Verify exhausted
-    assert_eq!(limiter.try_acquire_at(1, 14), Err(RateLimitError::ExceedsCapacity));
+    assert_eq!(limiter.try_acquire_at(14, 1), Err(SimpleRateLimitError::InsufficientCapacity));
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn test_rate_limiter_core_as_trait_object() {
     // Fill buckets gradually
     for i in 0..5 {
         let tick = i * 4 + 1;
-        assert_eq!(limiter.try_acquire_at(20, tick), Ok(()));
+        assert_eq!(limiter.try_acquire_at(tick, 20), Ok(()));
     }
     
     // At tick 19: window_start = 19 - 20 = -1 (saturates to 0)
@@ -284,7 +284,7 @@ fn test_rate_limiter_core_polymorphic_comparison() {
         
         // Use capacity
         assert_eq!(
-            limiter.try_acquire_at(50, 0),
+            limiter.try_acquire_at(0, 50),
             Ok(()),
             "Config '{}' should allow partial usage",
             config
@@ -317,9 +317,9 @@ fn test_rate_limiter_core_edge_cases() {
     
     // Window = 21 ticks
     // Spread across buckets
-    assert_eq!(limiter.try_acquire_at(30, 3), Ok(()));   // bucket 0 [0-6]
-    assert_eq!(limiter.try_acquire_at(30, 10), Ok(()));  // bucket 1 [7-13]
-    assert_eq!(limiter.try_acquire_at(30, 17), Ok(()));  // bucket 2 [14-20]
+    assert_eq!(limiter.try_acquire_at(3, 30), Ok(()));   // bucket 0 [0-6]
+    assert_eq!(limiter.try_acquire_at(10, 30), Ok(()));  // bucket 1 [7-13]
+    assert_eq!(limiter.try_acquire_at(17, 30), Ok(()));  // bucket 2 [14-20]
     
     // At tick 22: window_start = 22 - 21 = 1
     // - Bucket 0 [0-6]: start_tick=0 < 1, NOT in window

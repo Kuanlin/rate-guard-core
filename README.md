@@ -56,7 +56,7 @@ let current_tick = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
     .unwrap()
     .as_secs();
-match limiter.try_acquire_at(1, current_tick) {
+match limiter.try_acquire_at(current_tick, 1) {
     Ok(()) => println!("Request allowed!"),
     Err(e) => println!("Rate limited: {}", e),
 }
@@ -68,7 +68,7 @@ Great for maintaining steady traffic flow:
 use rate_guard_core::rate_limiters::LeakyBucketCore;
 // capacity = 50 tokens, refill = 5 tokens per 10 ticks
 let limiter = LeakyBucketCore::new(50, 10, 5);
-assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
+assert_eq!(limiter.try_acquire_at(0, 10), Ok(()));
 ```
 ### Fixed Window Counter
 
@@ -76,7 +76,7 @@ assert_eq!(limiter.try_acquire_at(10, 0), Ok(()));
 use rate_guard_core::rate_limiters::FixedWindowCounterCore;
 // capacity = 100 per fixed window, window size = 60 ticks
 let limiter = FixedWindowCounterCore::new(100, 60);
-assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
+assert_eq!(limiter.try_acquire_at(30, 1), Ok(()));
 ```
 
 ### Sliding Window Counter
@@ -84,7 +84,7 @@ assert_eq!(limiter.try_acquire_at(1, 30), Ok(()));
 use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
 // Window of 100 tokens across 6 buckets of 10 ticks each (50 ticks window)
 let limiter = SlidingWindowCounterCore::new(100, 10, 6);
-assert_eq!(limiter.try_acquire_at(5, 25), Ok(()));
+assert_eq!(limiter.try_acquire_at(25, 5), Ok(()));
 ```
 
 ### Approximate Sliding Window
@@ -94,14 +94,14 @@ formula: UsedCapacities = (1-X%) * lastWindowRequests + currentWindowRequests.  
 use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
 // Create ApproximateSlidingWindow limiter with capacity 100, window size 60 ticks
 let limiter = ApproximateSlidingWindowCore::new(100, 60);
-assert_eq!(limiter.try_acquire_at(10, 30), Ok(()));
+assert_eq!(limiter.try_acquire_at(30, 10), Ok(()));
 ```
 
 ## Error Handling
 All rate limiters return an `AcquireResult`:
 ```rust
 use rate_guard_core::{RateLimitError, AcquireResult};
-match limiter.try_acquire_at(1, tick) {
+match limiter.try_acquire_at(tick, 1) {
     Ok(()) => {
         // Request allowed
     },
@@ -139,7 +139,7 @@ let limiter = Arc::new(TokenBucketCore::new(100, 1, 10));
 for _ in 0..10 {
     let limiter = limiter.clone();
     thread::spawn(move || {
-        match limiter.try_acquire_at(1, get_current_tick()) {
+        match limiter.try_acquire_at(get_current_tick(, 1)) {
             Ok(()) => println!("Request processed"),
             Err(e) => println!("Rate limited: {}", e),
         }

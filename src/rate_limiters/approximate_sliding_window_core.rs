@@ -4,7 +4,7 @@
 //! a two-window approach to efficiently approximate a true sliding window.
 
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
 
 /// Toggles between window indices 0 and 1.
 ///
@@ -72,11 +72,11 @@ macro_rules! other_window {
 /// let counter = ApproximateSlidingWindowCore::new(100, 10);
 ///
 /// // Tick 5: Window 0 [0-9], sliding window [0, 5]
-/// assert_eq!(counter.try_acquire_at(30, 5), Ok(()));
+/// assert_eq!(counter.try_acquire_at(5, 30), Ok(()));
 ///
 /// // Tick 15: Window 1 [10-19], sliding window [6, 15]
 /// // Window 0 contributes partially based on overlap [6, 9] = 4 ticks
-/// assert_eq!(counter.try_acquire_at(40, 15), Ok(()));
+/// assert_eq!(counter.try_acquire_at(15, 40), Ok(()));
 /// ```
 pub struct ApproximateSlidingWindowCore {
     /// Maximum number of tokens allowed within the sliding window
@@ -100,9 +100,9 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// * `Ok(())` - Tokens successfully acquired
-    /// * `Err(RateLimitError)` - Various error conditions (see `try_acquire_at`)
-    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
-        self.try_acquire_at(tokens, tick)
+    /// * `Err(SimpleRateLimitError)` - Various error conditions (see `try_acquire_at`)
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+        self.try_acquire_at(tick, tokens)
     }
 
     /// Gets the current remaining capacity.
@@ -316,11 +316,11 @@ impl ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// * `Ok(())` - If the tokens were successfully acquired
-    /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed window capacity
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than any window start
+    /// * `Err(SimpleRateLimitError::InsufficientCapacity)` - If acquiring would exceed window capacity
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than any window start
     #[inline(always)]
-    pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -329,13 +329,13 @@ impl ApproximateSlidingWindowCore {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards - check against the latest window start
         let max_window_start = state.window_starts[0].max(state.window_starts[1]);
         if tick < max_window_start {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Update window state based on current tick
@@ -355,7 +355,7 @@ impl ApproximateSlidingWindowCore {
             state.windows[current_index] += tokens;
             Ok(())
         } else {
-            Err(RateLimitError::ExceedsCapacity)
+            Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
 
@@ -371,18 +371,18 @@ impl ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// * `Ok(remaining_capacity)` - Number of tokens that can still be acquired
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the current state
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire state lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the current state
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire state lock
     #[inline(always)]
-    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         let max_window_start = state.window_starts[0].max(state.window_starts[1]);
         if tick < max_window_start {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Update actual state
@@ -409,12 +409,12 @@ impl ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// * `Ok(remaining_capacity)` - Number of tokens that would be available
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire state lock
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire state lock
     #[inline(always)]
-    pub fn current_capacity_at(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity_at(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Clone state to do a fake update without affecting the original
@@ -445,12 +445,12 @@ impl ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// * `Ok(remaining_capacity)` - Number of tokens currently available based on existing state
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire state lock
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire state lock
     #[inline(always)]
-    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity(&self) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Use the current window's end as the reference tick for sliding window calculation

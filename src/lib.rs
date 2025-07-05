@@ -17,7 +17,7 @@
 //! let limiter = TokenBucketCore::new(100, 5, 10);
 //!
 //! // Try to acquire 20 tokens at tick 0
-//! match limiter.try_acquire_at(20, 0) {
+//! match limiter.try_acquire_at(0, 20) {
 //!     Ok(()) => println!("Request allowed"),
 //!     Err(e) => println!("Request denied: {}", e),
 //! }
@@ -94,74 +94,14 @@
 //! ```sh
 //! cargo build --no-default-features --features tick_u128
 //! ```
-
+//! 
 pub mod types;
 pub mod rate_limiters;
 pub mod rate_limiter_core;
+pub mod error; // 新增
+
 pub use types::Uint;
-
-/// Error types for rate limiter operations.
-///
-/// These errors indicate different failure modes when attempting to acquire
-/// tokens from a rate limiter.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum RateLimitError {
-    /// Request exceeds available capacity.
-    ///
-    /// This indicates that allowing the request would violate the rate limit.
-    /// The caller should either:
-    /// - Reject the request
-    /// - Wait and retry later
-    /// - Reduce the number of tokens requested
-    ExceedsCapacity,
-
-    /// Failed due to contention with other threads.
-    ///
-    /// This occurs when the internal lock cannot be acquired immediately.
-    /// The caller should typically:
-    /// - Retry the operation
-    /// - Implement backoff strategy
-    /// - Consider the request as temporarily failed
-    ContentionFailure,
-
-    /// The provided tick is too old or regressed.
-    ///
-    /// This occurs when:
-    /// - Time appears to go backwards
-    /// - An older tick is reused
-    /// - System clock adjustments occur
-    ExpiredTick,
-}
-
-impl std::fmt::Display for RateLimitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RateLimitError::ExceedsCapacity => write!(f, "Request exceeds available capacity"),
-            RateLimitError::ContentionFailure => write!(f, "Failed due to thread contention"),
-            RateLimitError::ExpiredTick => write!(f, "The provided tick is too old or regressed"),
-        }
-    }
-}
-
-impl std::error::Error for RateLimitError {}
-
-/// Result type for acquire operations.
-///
-/// Convenience alias for operations that either succeed (`()`) or fail
-/// with a [`RateLimitError`].
-///
-/// # Example
-/// ```rust
-/// use rate_guard_core::{AcquireResult, RateLimitError};
-/// use rate_guard_core::rate_limiters::TokenBucketCore;
-///
-/// let limiter = TokenBucketCore::new(10, 1, 1);
-/// let result: AcquireResult = limiter.try_acquire_at(5, 0);
-///
-/// match result {
-///     Ok(()) => println!("Acquired 5 tokens"),
-///     Err(RateLimitError::ExceedsCapacity) => println!("Not enough tokens"),
-///     Err(e) => println!("Other error: {}", e),
-/// }
-/// ```
-pub type AcquireResult = Result<(), RateLimitError>;
+pub use error::{
+    SimpleRateLimitError, VerboseRateLimitError,
+    SimpleAcquireResult, VerboseAcquireResult,
+};

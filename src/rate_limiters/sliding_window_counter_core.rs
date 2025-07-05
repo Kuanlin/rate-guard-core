@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
 
 /// Core implementation of the sliding window counter rate limiting algorithm.
 ///
@@ -33,14 +33,14 @@ use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, U
 /// let counter = SlidingWindowCounterCore::new(100, 5, 4);
 ///
 /// // Tick 2: bucket 0 [0-4], sliding window [0, 2]
-/// assert_eq!(counter.try_acquire_at(30, 2), Ok(()));
+/// assert_eq!(counter.try_acquire_at(2, 30), Ok(()));
 ///
 /// // Tick 7: bucket 1 [5-9], sliding window [0, 7] 
-/// assert_eq!(counter.try_acquire_at(40, 7), Ok(()));
+/// assert_eq!(counter.try_acquire_at(7, 40), Ok(()));
 ///
 /// // Tick 25: sliding window [6, 25], bucket 0 [0-4] expires
 /// // Only bucket 1 [5-9] (40 tokens) counts toward limit
-/// assert_eq!(counter.try_acquire_at(60, 25), Ok(()));
+/// assert_eq!(counter.try_acquire_at(25, 60), Ok(()));
 /// ```
 pub struct SlidingWindowCounterCore {
     /// Maximum number of tokens allowed within the sliding window
@@ -78,9 +78,9 @@ impl RateLimiterCore for SlidingWindowCounterCore {
     ///
     /// # Returns
     ///
-    /// Returns [`AcquireResult`] indicating success or specific failure reason. 
-    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
-        self.try_acquire_at(tokens, tick)
+    /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason. 
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+        self.try_acquire_at(tick, tokens)
     }
 
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
@@ -153,9 +153,9 @@ impl SlidingWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(())` - If the tokens were successfully acquired
-    /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed window capacity
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the last recorded operation
+    /// * `Err(SimpleRateLimitError::InsufficientCapacity)` - If acquiring would exceed window capacity
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the last recorded operation
     ///
     /// # Bucket Management
     ///
@@ -163,7 +163,7 @@ impl SlidingWindowCounterCore {
     /// - When accessing a bucket, if its start time doesn't match the expected time, it's reset (lazy reset)
     /// - Only buckets whose start time falls within the sliding window contribute to the total
     #[inline(always)]
-    pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -172,13 +172,13 @@ impl SlidingWindowCounterCore {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards (only check if we have previous data)
         if state.bucket_start_ticks[state.last_bucket_index] > 0 && 
            tick < state.bucket_start_ticks[state.last_bucket_index] {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Determine which bucket this tick belongs to
@@ -203,7 +203,7 @@ impl SlidingWindowCounterCore {
             state.last_bucket_index = current_bucket_index;
             Ok(())
         } else {
-            Err(RateLimitError::ExceedsCapacity)
+            Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
 
@@ -249,20 +249,20 @@ impl SlidingWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(remaining_capacity)` - Remaining tokens available in sliding window
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards
     #[inline(always)]
-    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards (only check if we have previous data)
         if state.bucket_start_ticks[state.last_bucket_index] > 0 && 
            tick < state.bucket_start_ticks[state.last_bucket_index] {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Determine which bucket this tick belongs to
@@ -296,12 +296,12 @@ impl SlidingWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(remaining_capacity)` - Remaining capacity in sliding window (without state update)
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
     #[inline(always)]
-    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity(&self) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Calculate total tokens used in all buckets (without window filtering)
@@ -322,12 +322,12 @@ impl SlidingWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(remaining_capacity)` - Remaining capacity in sliding window at given tick
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
     #[inline(always)]
-    pub fn current_capacity_at(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity_at(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Calculate the sliding window range

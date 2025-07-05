@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, Uint};
+use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint};
 
 /// Core implementation of the fixed window counter rate limiting algorithm.
 ///
@@ -32,13 +32,13 @@ use crate::{rate_limiter_core::RateLimiterCore, AcquireResult, RateLimitError, U
 /// let counter = FixedWindowCounterCore::new(100, 10);
 ///
 /// // Window 0 [0-9]: Use 50 tokens at tick 5
-/// assert_eq!(counter.try_acquire_at(50, 5), Ok(()));
+/// assert_eq!(counter.try_acquire_at(5, 50), Ok(()));
 /// 
 /// // Still in window 0: Use remaining 50 tokens
-/// assert_eq!(counter.try_acquire_at(50, 9), Ok(()));
+/// assert_eq!(counter.try_acquire_at(9, 50), Ok(()));
 ///
 /// // Window 1 [10-19]: Counter resets, can use full capacity again
-/// assert_eq!(counter.try_acquire_at(100, 10), Ok(()));
+/// assert_eq!(counter.try_acquire_at(10, 100), Ok(()));
 /// ```
 pub struct FixedWindowCounterCore {
     /// Maximum number of tokens allowed per window
@@ -71,9 +71,9 @@ impl RateLimiterCore for FixedWindowCounterCore {
     ///
     /// # Returns
     ///
-    /// Returns [`AcquireResult`] indicating success or specific failure reason. 
-    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
-        self.try_acquire_at(tokens, tick)
+    /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason. 
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+        self.try_acquire_at(tick, tokens)
     }
 
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
@@ -135,9 +135,9 @@ impl FixedWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(())` - If the tokens were successfully acquired
-    /// * `Err(RateLimitError::ExceedsCapacity)` - If acquiring would exceed window capacity
-    /// * `Err(RateLimitError::ContentionFailure)` - If unable to acquire the internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - If the tick is older than the current window start
+    /// * `Err(SimpleRateLimitError::ExceedsCapacity)` - If acquiring would exceed window capacity
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the current window start
     ///
     /// # Window Transitions
     ///
@@ -145,7 +145,7 @@ impl FixedWindowCounterCore {
     /// the counter automatically resets to zero and the window start time is updated.
     /// This allows for immediate full capacity usage in the new window.
     #[inline(always)]
-    pub fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -154,12 +154,12 @@ impl FixedWindowCounterCore {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards within the current window
         if tick < state.start_tick {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Calculate which window the current tick belongs to
@@ -178,7 +178,7 @@ impl FixedWindowCounterCore {
             state.count += tokens;
             Ok(())
         } else {
-            Err(RateLimitError::ExceedsCapacity)
+            Err(SimpleRateLimitError::InsufficientCapacity)
         }
     }
 
@@ -193,19 +193,19 @@ impl FixedWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(remaining_capacity)` - Remaining tokens available in current window
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
-    /// * `Err(RateLimitError::ExpiredTick)` - Time went backwards
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards
     #[inline(always)]
-    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, RateLimitError> {
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         // Prevent time from going backwards within the current window
         if tick < state.start_tick {
-            return Err(RateLimitError::ExpiredTick);
+            return Err(SimpleRateLimitError::ExpiredTick);
         }
 
         // Calculate which window the current tick belongs to
@@ -231,12 +231,12 @@ impl FixedWindowCounterCore {
     ///
     /// # Returns
     /// * `Ok(remaining_capacity)` - Remaining capacity in current window (without window update)
-    /// * `Err(RateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
     #[inline(always)]
-    pub fn current_capacity(&self) -> Result<Uint, RateLimitError> {
+    pub fn current_capacity(&self) -> Result<Uint, SimpleRateLimitError> {
         let state = match self.state.try_lock() {
             Ok(guard) => guard,
-            Err(_) => return Err(RateLimitError::ContentionFailure),
+            Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
         };
 
         Ok(self.capacity.saturating_sub(state.count))

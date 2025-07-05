@@ -3,7 +3,7 @@
 //! This module defines the unified trait used by all rate limiter implementations.
 
 pub use crate::types::Uint;
-use crate::AcquireResult;
+use crate::SimpleAcquireResult;
 
 /// The core trait for all rate limiter algorithms.
 ///
@@ -19,7 +19,7 @@ pub trait RateLimiterCore: Send + Sync {
     /// # Returns
     /// * `Ok(())` on success
     /// * `Err(RateLimitError)` if denied or failed
-    fn try_acquire_at(&self, tokens: Uint, tick: Uint) -> AcquireResult;
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult;
 
     /// Returns the number of tokens that can still be acquired at the given tick.
     ///
