@@ -72,6 +72,7 @@ impl RateLimiterCore for FixedWindowCounterCore {
     /// # Returns
     ///
     /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason. 
+    #[inline(always)]
     fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
     }
@@ -112,6 +113,7 @@ impl RateLimiterCore for FixedWindowCounterCore {
     /// # Returns
     ///
     /// The number of tokens currently available for acquisition, or 0 if error.
+    #[inline(always)]
     fn capacity_remaining(&self, tick: Uint) -> Uint {
         self.capacity_remaining(tick).unwrap_or(0)
     }
@@ -252,6 +254,7 @@ impl FixedWindowCounterCore {
     ///     Err(e) => println!("Denied: {}", e),
     /// }
     /// ```
+    #[inline(always)]
     pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
         if tokens == 0 {
             return Ok(());
@@ -357,5 +360,59 @@ impl FixedWindowCounterCore {
         };
 
         Ok(self.capacity.saturating_sub(state.count))
+    }
+}
+
+/// Configuration structure for creating a `FixedWindowCounterCore` limiter.
+#[derive(Debug, Clone)]
+pub struct FixedWindowCounterCoreConfig {
+    /// Maximum number of actions allowed per window.
+    pub capacity: Uint,
+    /// Number of ticks that define the fixed window length.
+    pub window_size: Uint,
+}
+
+impl FixedWindowCounterCoreConfig {
+    /// Creates a new configuration instance.
+    pub fn new(capacity: Uint, window_size: Uint) -> Self {
+        Self { capacity, window_size }
+    }
+}
+
+impl From<FixedWindowCounterCoreConfig> for FixedWindowCounterCore {
+    /// Converts a `FixedWindowCounterCoreConfig` into a `FixedWindowCounterCore` instance.
+    ///
+    /// # Panics
+    /// This method will panic if either `capacity` or `window_size` is zero.
+    /// It is intended for use with trusted or pre-validated inputs.
+    ///
+    /// # Examples
+    ///
+    /// Using [`From::from`] explicitly:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
+    ///
+    /// let config = FixedWindowCounterCoreConfig {
+    ///     capacity: 100,
+    ///     window_size: 60,
+    /// };
+    ///
+    /// let limiter = FixedWindowCounterCore::from(config);
+    /// ```
+    ///
+    /// Using `.into()` with type inference:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
+    ///
+    /// let limiter: FixedWindowCounterCore = FixedWindowCounterCoreConfig {
+    ///     capacity: 100,
+    ///     window_size: 60,
+    /// }.into();
+    /// ```
+    #[inline(always)]
+    fn from(config: FixedWindowCounterCoreConfig) -> Self {
+        FixedWindowCounterCore::new(config.capacity, config.window_size)
     }
 }

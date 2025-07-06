@@ -30,15 +30,20 @@
 
 pub mod leaky_bucket_core;
 pub use leaky_bucket_core::LeakyBucketCore;
+pub use leaky_bucket_core::LeakyBucketCoreConfig;
 
 pub mod token_bucket_core;
 pub use token_bucket_core::TokenBucketCore;
+pub use token_bucket_core::TokenBucketCoreConfig;
 
 pub mod fixed_window_counter_core;
 pub use fixed_window_counter_core::FixedWindowCounterCore;
+pub use fixed_window_counter_core::FixedWindowCounterCoreConfig;
 
 pub mod sliding_window_counter_core;
 pub use sliding_window_counter_core::SlidingWindowCounterCore;
+pub use sliding_window_counter_core::SlidingWindowCounterCoreConfig;
 
 pub mod approximate_sliding_window_core;
 pub use approximate_sliding_window_core::ApproximateSlidingWindowCore;
+pub use approximate_sliding_window_core::ApproximateSlidingWindowCoreConfig;

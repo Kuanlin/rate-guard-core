@@ -64,6 +64,7 @@ impl RateLimiterCore for TokenBucketCore {
     ///
     /// # Returns
     /// Returns [`SimpleAcquireResult`] indicating success or error type.
+    #[inline(always)]
     fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
     }
@@ -102,6 +103,7 @@ impl RateLimiterCore for TokenBucketCore {
     ///
     /// # Returns
     /// Number of available tokens or 0 if error.
+    #[inline(always)]
     fn capacity_remaining(&self, tick: Uint) -> Uint {
         self.capacity_remaining(tick).unwrap_or(0)
     }
@@ -350,5 +352,67 @@ impl TokenBucketCore {
         };
 
         Ok(state.available)
+    }
+}
+
+/// Configuration structure for creating a `TokenBucketCore` limiter.
+#[derive(Debug, Clone)]
+pub struct TokenBucketCoreConfig {
+    /// Maximum number of tokens the bucket can hold.
+    pub capacity: Uint,
+    /// Number of ticks between each refill event.
+    pub refill_interval: Uint,
+    /// Number of tokens added per interval.
+    pub refill_amount: Uint,
+}
+
+impl TokenBucketCoreConfig {
+    /// Creates a new configuration instance.
+    pub fn new(capacity: Uint, refill_interval: Uint, refill_amount: Uint) -> Self {
+        Self {
+            capacity,
+            refill_interval,
+            refill_amount,
+        }
+    }
+}
+
+impl From<TokenBucketCoreConfig> for TokenBucketCore {
+    /// Converts a `TokenBucketCoreConfig` into a `TokenBucketCore` instance.
+    ///
+    /// # Panics
+    /// This method will panic if any field in the config is zero.
+    /// It is intended for use with validated or hardcoded input.
+    ///
+    /// # Examples
+    ///
+    /// Using [`From::from`] explicitly:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{TokenBucketCore, TokenBucketCoreConfig};
+    ///
+    /// let config = TokenBucketCoreConfig {
+    ///     capacity: 100,
+    ///     refill_interval: 10,
+    ///     refill_amount: 5,
+    /// };
+    ///
+    /// let limiter = TokenBucketCore::from(config);
+    /// ```
+    ///
+    /// Using `.into()` with type inference:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{TokenBucketCore, TokenBucketCoreConfig};
+    ///
+    /// let limiter: TokenBucketCore = TokenBucketCoreConfig {
+    ///     capacity: 100,
+    ///     refill_interval: 10,
+    ///     refill_amount: 5,
+    /// }.into();
+    /// ```
+    #[inline(always)]
+    fn from(config: TokenBucketCoreConfig) -> Self {
+        TokenBucketCore::new(config.capacity, config.refill_interval, config.refill_amount)
     }
 }

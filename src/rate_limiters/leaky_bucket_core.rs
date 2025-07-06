@@ -67,6 +67,7 @@ impl RateLimiterCore for LeakyBucketCore {
     /// # Returns
     ///
     /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason.
+    #[inline(always)]
     fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
     }
@@ -80,6 +81,7 @@ impl RateLimiterCore for LeakyBucketCore {
     /// # Returns
     ///
     /// The number of tokens currently available for acquisition, or 0 if error.
+    #[inline(always)]
     fn capacity_remaining(&self, tick: Uint) -> Uint {
         self.capacity_remaining(tick).unwrap_or(0)
     }
@@ -101,6 +103,7 @@ impl RateLimiterCore for LeakyBucketCore {
     ///     println!("Failed to acquire tokens: {}", e); 
     /// }
     /// ```
+    #[inline(always)]
     fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
         self.try_acquire_verbose_at(tick, tokens)
     }
@@ -333,5 +336,68 @@ impl LeakyBucketCore {
         };
 
         Ok(state.remaining)
+    }
+}
+
+
+/// Configuration for creating a `LeakyBucketCore`.
+#[derive(Debug, Clone)]
+pub struct LeakyBucketCoreConfig {
+    /// Maximum number of tokens the bucket can hold.
+    pub capacity: Uint,
+    /// Number of ticks between each leak event.
+    pub leak_interval: Uint,
+    /// Number of tokens that leak out per interval.
+    pub leak_amount: Uint,
+}
+
+impl LeakyBucketCoreConfig {
+    /// Creates a new configuration instance.
+    pub fn new(capacity: Uint, leak_interval: Uint, leak_amount: Uint) -> Self {
+        Self {
+            capacity,
+            leak_interval,
+            leak_amount,
+        }
+    }
+}
+
+impl From<LeakyBucketCoreConfig> for LeakyBucketCore {
+    /// Converts a `LeakyBucketCoreConfig` into a `LeakyBucketCore` instance.
+    ///
+    /// # Panics
+    /// This method will panic if any field in the config is zero.
+    /// It is intended for use with validated or hardcoded input.
+    ///
+    /// # Examples
+    ///
+    /// Using [`From::from`] explicitly:
+    ///
+    /// ```rust
+    /// use rate_guard_core::rate_limiters::{LeakyBucketCore, LeakyBucketCoreConfig};
+    ///
+    /// let config = LeakyBucketCoreConfig {
+    ///     capacity: 100,
+    ///     leak_interval: 10,
+    ///     leak_amount: 5,
+    /// };
+    ///
+    /// let limiter = LeakyBucketCore::from(config);
+    /// ```
+    ///
+    /// Using `.into()` with type inference:
+    ///
+    /// ```rust
+    /// use rate_guard_core::rate_limiters::{LeakyBucketCore, LeakyBucketCoreConfig};
+    ///
+    /// let limiter: LeakyBucketCore = LeakyBucketCoreConfig {
+    ///     capacity: 100,
+    ///     leak_interval: 10,
+    ///     leak_amount: 5,
+    /// }.into();
+    /// ```
+    #[inline(always)]
+    fn from(config: LeakyBucketCoreConfig) -> Self {
+        LeakyBucketCore::new(config.capacity, config.leak_interval, config.leak_amount)
     }
 }

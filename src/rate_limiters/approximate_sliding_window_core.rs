@@ -101,6 +101,7 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     ///
     /// * `Ok(())` - Tokens successfully acquired
     /// * `Err(SimpleRateLimitError)` - Various error conditions (see `try_acquire_at`)
+    #[inline(always)]
     fn try_acquire_at(&self, tick: Uint, tokens: Uint) -> SimpleAcquireResult {
         self.try_acquire_at(tick, tokens)
     }
@@ -114,6 +115,7 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     /// # Returns
     /// * `Ok(())` - Tokens successfully acquired
     /// * `Err(VerboseRateLimitError)` - Various error conditions with detailed diagnostics
+    #[inline(always)]
     fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
         self.try_acquire_verbose_at(tick, tokens)
     }
@@ -127,6 +129,7 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// Number of tokens currently available for acquisition
+    #[inline(always)]
     fn capacity_remaining(&self, tick: Uint) -> Uint {
         self.capacity_remaining(tick).unwrap_or(0)
     }
@@ -197,6 +200,7 @@ impl ApproximateSlidingWindowCore {
     /// * `state` - Mutable reference to the window state
     /// * `tick` - The current time tick
     /// * `window_ticks` - Duration of each window in ticks
+    #[inline(always)]
     fn state_transition_by_tick(
         state: &mut ApproximateSlidingWindowCoreState,
         tick: Uint,
@@ -216,7 +220,7 @@ impl ApproximateSlidingWindowCore {
                 state.window_starts[expected_index] = expected_start;
 
                 // Check if the other window is completely expired
-                let other_idx = crate::other_window!(expected_index);
+                let other_idx = other_window!(expected_index);
                 if expected_start > state.window_starts[other_idx] + window_ticks {
                     // Other window is completely expired, reset it
                     state.windows[other_idx] = 0;
@@ -246,6 +250,8 @@ impl ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// Total weighted contribution from all active windows
+    
+    #[inline(always)]
     fn calculate_weighted_contribution_by_state(
         state: &ApproximateSlidingWindowCoreState,
         sw_head: Uint,
@@ -253,7 +259,7 @@ impl ApproximateSlidingWindowCore {
         window_ticks: Uint,
     ) -> Uint {
         let current_idx = state.current_index;
-        let other_idx = crate::other_window!(current_idx);
+        let other_idx = other_window!(current_idx);
 
         // Current window always contributes with full weight
         let current_contribution = state.windows[current_idx] * window_ticks;
@@ -359,7 +365,7 @@ impl ApproximateSlidingWindowCore {
 
         // Calculate weighted contributions and check capacity
         let total_contribution = self.calculate_weighted_contribution(&state, sw_head, tick);
-        let required_contribution = tokens * self.window_ticks;
+        let required_contribution = self.window_ticks.saturating_mul(tokens);
         let capacity_contribution = self.capacity * self.window_ticks;
         let current_index = state.current_index;
 
@@ -372,6 +378,7 @@ impl ApproximateSlidingWindowCore {
         }
     }
 
+    #[inline(always)]
     pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
         if tokens == 0 {
             return Ok(());
@@ -541,5 +548,62 @@ impl ApproximateSlidingWindowCore {
         let remaining_contribution = capacity_contribution.saturating_sub(total_contribution);
 
         Ok(remaining_contribution / self.window_ticks)
+    }
+}
+
+/// Configuration structure for creating an `ApproximateSlidingWindowCore` limiter.
+#[derive(Debug, Clone)]
+pub struct ApproximateSlidingWindowCoreConfig {
+    /// Maximum number of actions allowed in the sliding window.
+    pub capacity: Uint,
+    /// Total size of the sliding window in ticks.
+    pub window_ticks: Uint,
+}
+
+impl ApproximateSlidingWindowCoreConfig {
+    /// Creates a new configuration instance.
+    pub fn new(capacity: Uint, window_ticks: Uint) -> Self {
+        Self {
+            capacity,
+            window_ticks,
+        }
+    }
+}
+
+impl From<ApproximateSlidingWindowCoreConfig> for ApproximateSlidingWindowCore {
+    /// Converts an `ApproximateSlidingWindowCoreConfig` into an `ApproximateSlidingWindowCore` instance.
+    ///
+    /// # Panics
+    /// This method will panic if any of the configuration fields are zero.
+    /// It assumes the input is pre-validated or hardcoded.
+    ///
+    /// # Examples
+    ///
+    /// Using [`From::from`] explicitly:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+    ///
+    /// let config = ApproximateSlidingWindowCoreConfig {
+    ///     capacity: 100,
+    ///     window_ticks: 60,
+    /// };
+    ///
+    /// let limiter = ApproximateSlidingWindowCore::from(config);
+    /// ```
+    ///
+    /// Using `.into()` with type inference:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+    ///
+    /// let limiter: ApproximateSlidingWindowCore = ApproximateSlidingWindowCoreConfig {
+    ///     capacity: 100,
+    ///     window_ticks: 60,
+    /// }.into();
+    /// ```
+    #[inline(always)]
+    fn from(config: ApproximateSlidingWindowCoreConfig) -> Self {
+        ApproximateSlidingWindowCore::new(config.capacity, config.window_ticks)
     }
 }

@@ -221,6 +221,20 @@ impl SlidingWindowCounterCore {
         }
     }
 
+    /// Attempts to acquire the specified number of tokens at the given tick,
+    /// returning detailed diagnostics if the request is denied.
+    /// This method behaves similarly to `try_acquire_at`, but provides
+    /// richer error information for better diagnostics.
+    /// # Parameters
+    /// * `tokens` - Number of tokens to acquire
+    /// * `tick` - Current time tick for the operation
+    /// # Returns
+    /// * `Ok(())` - If the tokens were successfully acquired
+    /// * `Err(VerboseRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
+    /// * `Err(VerboseRateLimitError::ExpiredTick { min_acceptable_tick })` - If the tick is older than the last recorded operation
+    /// * `Err(VerboseRateLimitError::BeyondCapacity { acquiring, capacity })` - If the requested tokens exceed the maximum capacity
+    /// * `Err(VerboseRateLimitError::InsufficientCapacity { acquiring, available, retry_after_ticks })` - If there are not enough tokens available, but suggests how long to wait before retrying
+    #[inline(always)]
     pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
         if tokens == 0 {
             return Ok(());
@@ -434,5 +448,67 @@ impl SlidingWindowCounterCore {
         let total_used = self.count_tokens_in_valid_buckets_within_sliding_window(&state, tick, window_start_tick);
 
         Ok(self.capacity.saturating_sub(total_used))
+    }
+}
+
+/// Configuration structure for creating a `SlidingWindowCounterCore` limiter.
+#[derive(Debug, Clone)]
+pub struct SlidingWindowCounterCoreConfig {
+    /// Maximum number of tokens allowed in the sliding window.
+    pub capacity: Uint,
+    /// Number of ticks per bucket in the sliding window.
+    pub bucket_ticks: Uint,
+    /// Total number of buckets in the sliding window.
+    pub bucket_count: Uint,
+}
+
+impl SlidingWindowCounterCoreConfig {
+    /// Creates a new configuration instance.
+    pub fn new(capacity: Uint, bucket_ticks: Uint, bucket_count: Uint) -> Self {
+        Self {
+            capacity,
+            bucket_ticks,
+            bucket_count,
+        }
+    }
+}
+
+impl From<SlidingWindowCounterCoreConfig> for SlidingWindowCounterCore {
+    /// Converts a `SlidingWindowCounterCoreConfig` into a `SlidingWindowCounterCore` instance.
+    ///
+    /// # Panics
+    /// This method will panic if any of the configuration fields are zero.
+    /// It assumes that the configuration is already validated or hardcoded.
+    ///
+    /// # Examples
+    ///
+    /// Using [`From::from`] explicitly:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
+    ///
+    /// let config = SlidingWindowCounterCoreConfig {
+    ///     capacity: 100,
+    ///     bucket_ticks: 5,
+    ///     bucket_count: 12,
+    /// };
+    ///
+    /// let limiter = SlidingWindowCounterCore::from(config);
+    /// ```
+    ///
+    /// Using `.into()` with type inference:
+    ///
+    /// ```
+    /// use rate_guard_core::rate_limiters::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
+    ///
+    /// let limiter: SlidingWindowCounterCore = SlidingWindowCounterCoreConfig {
+    ///     capacity: 100,
+    ///     bucket_ticks: 5,
+    ///     bucket_count: 12,
+    /// }.into();
+    /// ```
+    #[inline(always)]
+    fn from(config: SlidingWindowCounterCoreConfig) -> Self {
+        SlidingWindowCounterCore::new(config.capacity, config.bucket_ticks, config.bucket_count)
     }
 }
