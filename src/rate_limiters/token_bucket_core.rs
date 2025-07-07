@@ -293,6 +293,14 @@ impl TokenBucketCore {
         }
     }
 
+    /// Gets the current number of tokens remaining in the bucket.
+    /// This method updates the bucket state based on elapsed time (performs refill),
+    /// then returns the current number of available tokens.
+    #[inline]
+    pub fn tokens_in_bucket(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.capacity_remaining(tick)
+    }
+
     /// Gets the current remaining token capacity.
     ///
     /// This method updates the bucket state based on elapsed time (performs refill),

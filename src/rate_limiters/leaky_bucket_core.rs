@@ -280,22 +280,33 @@ impl LeakyBucketCore {
         }
     }
 
-    /// Gets the current remaining token capacity.
+    /// Returns the current number of tokens in the bucket after applying leak logic.
     ///
-    /// This method updates the bucket state based on elapsed time (performs leak),
-    /// then returns the current number of tokens in the bucket.
+    /// This method updates the bucket state based on the elapsed time since the last leak event,
+    /// then returns the number of tokens currently stored in the bucket.
     ///
-    /// # Parameters
+    /// # Arguments
     ///
-    /// * `tick` - Current time tick for leak calculation.
+    /// * `tick` - The current time tick used to calculate how many tokens have leaked out.
     ///
     /// # Returns
     ///
-    /// * `Ok(remaining_tokens)` - Current number of tokens in bucket.
-    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock.
-    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards.
+    /// * `Ok(tokens)` - Number of tokens currently in the bucket.
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Failed to acquire the internal lock.
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Provided tick is earlier than the last operation.
+    ///
+    /// # Example
+    /// ```
+    /// # use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// # use rate_guard_core::SimpleRateLimitError;
+    /// # let current_tick = 0;
+    /// let leaky = LeakyBucketCore::new(100, 10, 5);
+    /// let tokens = leaky.tokens_in_bucket(current_tick).unwrap_or(100);
+    /// println!("There are {} tokens in the bucket.", tokens);
+    /// ```
+
     #[inline(always)]
-    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+    pub fn tokens_in_bucket(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,
             Err(_) => return Err(SimpleRateLimitError::ContentionFailure),
@@ -317,6 +328,38 @@ impl LeakyBucketCore {
 
         Ok(state.remaining)
     }
+
+    /// Returns how many tokens can still be acquired before the bucket reaches capacity.
+    ///
+    /// This method updates the internal bucket state based on elapsed time and leak behavior,
+    /// then calculates how many more tokens can be accepted without exceeding the configured capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - The current time tick used to apply leak logic.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(available_capacity)` - Number of tokens that can still be acquired.
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Failed to acquire the internal lock.
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Provided tick is earlier than the last operation.
+    ///
+    /// # Example
+    /// ```
+    /// # use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// # use rate_guard_core::SimpleRateLimitError;
+    /// # let leaky = LeakyBucketCore::new(100, 10, 5);
+    /// # let current_tick = 0;
+    /// let tokens = leaky.capacity_remaining(current_tick).unwrap_or(0);
+    /// println!("There are {} tokens in the bucket.", tokens);
+    /// ```
+    #[inline(always)]
+    pub fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.tokens_in_bucket(tick)
+            .map(|used| self.capacity.saturating_sub(used))
+    }
+
+
 
     /// Gets the current token count without updating leak state.
     ///
