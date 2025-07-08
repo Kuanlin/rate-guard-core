@@ -17,14 +17,14 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { version = "0.5.0" }
+rate-guard-core = { version = "0.5.2" }
 ```
 
 ### from Github
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.0" }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.2" }
 ```
 
 ---
@@ -36,13 +36,13 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 ### from crate.io
 ```toml
 [dependencies]
-rate-guard-core = { version = "0.5.0", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { version = "0.5.2", default-features = false, features = ["tick_u128"] }
 ```
 
 ### from Github
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.0", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.2", default-features = false, features = ["tick_u128"] }
 ```
 
 ---
