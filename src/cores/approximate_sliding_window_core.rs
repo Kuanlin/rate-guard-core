@@ -4,7 +4,7 @@
 //! a two-window approach to efficiently approximate a true sliding window.
 
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
+use crate::{rate_limit::RateLimitCore, SimpleRateLimitResult, SimpleRateLimitError, Uint, VerboseRateLimitResult, VerboseRateLimitError};
 
 /// Toggles between window indices 0 and 1.
 ///
@@ -66,7 +66,7 @@ macro_rules! other_window {
 /// # Example
 ///
 /// ```rust
-/// # use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
+/// # use rate_guard_core::cores::ApproximateSlidingWindowCore;
 ///
 /// // Create counter with capacity 100, window size 10 ticks
 /// let counter = ApproximateSlidingWindowCore::new(100, 10);
@@ -87,7 +87,7 @@ pub struct ApproximateSlidingWindowCore {
     state: Mutex<ApproximateSlidingWindowCoreState>,
 }
 
-impl RateLimiterCore for ApproximateSlidingWindowCore {
+impl RateLimitCore for ApproximateSlidingWindowCore {
     /// Attempts to acquire tokens at the current tick.
     ///
     /// This is a convenience method that calls `try_acquire_at` with the provided tick.
@@ -102,7 +102,7 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     /// * `Ok(())` - Tokens successfully acquired
     /// * `Err(SimpleRateLimitError)` - Various error conditions (see `try_acquire_at`)
     #[inline(always)]
-    fn try_acquire_at(&self, tick: Uint, tokens: Uint) -> SimpleAcquireResult {
+    fn try_acquire_at(&self, tick: Uint, tokens: Uint) -> SimpleRateLimitResult {
         self.try_acquire_at(tick, tokens)
     }
 
@@ -116,8 +116,18 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     /// * `Ok(())` - Tokens successfully acquired
     /// * `Err(VerboseRateLimitError)` - Various error conditions with detailed diagnostics
     #[inline(always)]
-    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         self.try_acquire_verbose_at(tick, tokens)
+    }
+
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    /// # Arguments
+    /// * `tick` - Current time tick for leak calculation
+    /// # Returns
+    /// Number of tokens currently available for acquisition, or an error if the tick is too old.
+    #[inline(always)]
+    fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.capacity_remaining(tick)
     }
 
     /// Gets the current remaining capacity.
@@ -129,9 +139,10 @@ impl RateLimiterCore for ApproximateSlidingWindowCore {
     /// # Returns
     ///
     /// Number of tokens currently available for acquisition
+    /// This is a convenience method that returns 0 if the capacity is not available.
     #[inline(always)]
-    fn capacity_remaining(&self, tick: Uint) -> Uint {
-        self.capacity_remaining(tick).unwrap_or(0)
+    fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining_or_0(tick)
     }
 }
 
@@ -172,7 +183,7 @@ impl ApproximateSlidingWindowCore {
     /// # Example
     ///
     /// ```rust
-    /// # use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
+    /// # use rate_guard_core::cores::ApproximateSlidingWindowCore;
     ///
     /// // Allow 200 tokens within a sliding window of 20 ticks
     /// let counter = ApproximateSlidingWindowCore::new(200, 20);
@@ -339,7 +350,7 @@ impl ApproximateSlidingWindowCore {
     /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
     /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than any window start
     #[inline(always)]
-    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -379,7 +390,7 @@ impl ApproximateSlidingWindowCore {
     }
 
     #[inline(always)]
-    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         if tokens == 0 {
             return Ok(());
         }
@@ -480,6 +491,21 @@ impl ApproximateSlidingWindowCore {
         Ok(remaining_contribution / self.window_ticks)
     }
 
+    /// Gets the current remaining capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - Current time tick
+    ///
+    /// # Returns
+    ///
+    /// Number of tokens currently available for acquisition
+    /// This is a convenience method that returns 0 if the capacity is not available.
+    #[inline(always)]
+    pub fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
+    
     /// Gets the remaining capacity for a specific tick without updating window state.
     ///
     /// This method provides a read-only view of what the remaining capacity would be
@@ -549,6 +575,15 @@ impl ApproximateSlidingWindowCore {
 
         Ok(remaining_contribution / self.window_ticks)
     }
+
+
+    /// Returns the current remaining capacity
+    /// This method is a convenience wrapper around `current_capacity`
+    /// that returns 0 if the capacity is not available.
+    #[inline(always)]
+    pub fn current_capacity_or_0(&self) -> Uint {
+        self.current_capacity().unwrap_or(0)
+    }
 }
 
 /// Configuration structure for creating an `ApproximateSlidingWindowCore` limiter.
@@ -582,7 +617,7 @@ impl From<ApproximateSlidingWindowCoreConfig> for ApproximateSlidingWindowCore {
     /// Using [`From::from`] explicitly:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+    /// use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
     ///
     /// let config = ApproximateSlidingWindowCoreConfig {
     ///     capacity: 100,
@@ -595,7 +630,7 @@ impl From<ApproximateSlidingWindowCoreConfig> for ApproximateSlidingWindowCore {
     /// Using `.into()` with type inference:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+    /// use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
     ///
     /// let limiter: ApproximateSlidingWindowCore = ApproximateSlidingWindowCoreConfig {
     ///     capacity: 100,

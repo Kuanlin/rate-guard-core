@@ -1,5 +1,5 @@
 use rate_guard_core::{SimpleRateLimitError};
-use rate_guard_core::rate_limiters::LeakyBucketCore;
+use rate_guard_core::cores::LeakyBucketCore;
 
 #[test]
 fn test_contention_failure() {

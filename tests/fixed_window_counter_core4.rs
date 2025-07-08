@@ -1,5 +1,5 @@
 
-use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+use rate_guard_core::cores::FixedWindowCounterCore;
 use rate_guard_core::Uint;
 use rate_guard_core::error::VerboseRateLimitError;
 

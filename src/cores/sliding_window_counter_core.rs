@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
+use crate::{rate_limit::RateLimitCore, SimpleRateLimitResult, SimpleRateLimitError, Uint, VerboseRateLimitResult, VerboseRateLimitError};
 
 /// Core implementation of the sliding window counter rate limiting algorithm.
 ///
@@ -26,7 +26,7 @@ use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateL
 /// # Example
 ///
 /// ```rust
-/// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
+/// use rate_guard_core::cores::SlidingWindowCounterCore;
 ///
 /// // Create counter with capacity 100, bucket size 5 ticks, 4 buckets total
 /// // Total window size = 5 * 4 = 20 ticks
@@ -66,7 +66,7 @@ struct SlidingWindowCounterCoreState {
 
 /// Core trait implementation for the fixed window counter.
 /// This provides the basic operations needed by the rate limiter core trait.
-impl RateLimiterCore for SlidingWindowCounterCore {
+impl RateLimitCore for SlidingWindowCounterCore {
     /// Attempts to acquire the specified number of tokens at the given tick.
     ///
     /// This method is a wrapper around `try_acquire_at` for convenience.
@@ -78,8 +78,8 @@ impl RateLimiterCore for SlidingWindowCounterCore {
     ///
     /// # Returns
     ///
-    /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason. 
-    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    /// Returns [`SimpleRateLimitResult`] indicating success or specific failure reason. 
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         self.try_acquire_at(tick, tokens)
     }
 
@@ -91,10 +91,21 @@ impl RateLimiterCore for SlidingWindowCounterCore {
     /// * `tick` - Current time tick.
     /// # Returns
     /// 
-    /// Returns [`VerboseAcquireResult`] with detailed diagnostics or error.
+    /// Returns [`VerboseRateLimitResult`] with detailed diagnostics or error.
     /// This includes information like available tokens, retry time, and more.
-    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         self.try_acquire_verbose_at(tick, tokens)
+    }
+
+
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    /// 
+    /// # Arguments
+    /// * `tick` - Current time tick for leak calculation.
+    /// # Returns
+    /// The number of tokens currently available for acquisition, or an error if unable to acquire lock or if tick is expired.
+    fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.capacity_remaining(tick)
     }
 
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
@@ -106,8 +117,8 @@ impl RateLimiterCore for SlidingWindowCounterCore {
     /// # Returns
     ///
     /// The number of tokens currently available for acquisition, or 0 if error.
-    fn capacity_remaining(&self, tick: Uint) -> Uint {
-        self.capacity_remaining(tick).unwrap_or(0)
+    fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining_or_0(tick)
     }
 }
 
@@ -125,7 +136,7 @@ impl SlidingWindowCounterCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
+    /// use rate_guard_core::cores::SlidingWindowCounterCore;
     /// // Window of 100 tokens across 5 buckets of 10 ticks each (50 tick window)
     /// let counter = SlidingWindowCounterCore::new(100, 10, 5);
     /// ```
@@ -177,7 +188,7 @@ impl SlidingWindowCounterCore {
     /// - When accessing a bucket, if its start time doesn't match the expected time, it's reset (lazy reset)
     /// - Only buckets whose start time falls within the sliding window contribute to the total
     #[inline(always)]
-    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -235,7 +246,7 @@ impl SlidingWindowCounterCore {
     /// * `Err(VerboseRateLimitError::BeyondCapacity { acquiring, capacity })` - If the requested tokens exceed the maximum capacity
     /// * `Err(VerboseRateLimitError::InsufficientCapacity { acquiring, available, retry_after_ticks })` - If there are not enough tokens available, but suggests how long to wait before retrying
     #[inline(always)]
-    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         if tokens == 0 {
             return Ok(());
         }
@@ -399,6 +410,20 @@ impl SlidingWindowCounterCore {
         Ok(self.capacity.saturating_sub(total_used))
     }
 
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - Current time tick for leak calculation.
+    ///
+    /// # Returns
+    ///
+    /// The number of tokens currently available for acquisition, or 0 if error.
+    #[inline(always)]
+    pub fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
+
     /// Gets the current remaining capacity without updating bucket states.
     ///
     /// This method returns the remaining capacity in the current sliding window
@@ -449,6 +474,15 @@ impl SlidingWindowCounterCore {
 
         Ok(self.capacity.saturating_sub(total_used))
     }
+
+
+    /// Returns the current remaining capacity
+    /// This method is a convenience wrapper around `current_capacity`
+    /// that returns 0 if the capacity is not available.
+    #[inline(always)]
+    pub fn current_capacity_or_0(&self) -> Uint {
+        self.current_capacity().unwrap_or(0)
+    }
 }
 
 /// Configuration structure for creating a `SlidingWindowCounterCore` limiter.
@@ -485,7 +519,7 @@ impl From<SlidingWindowCounterCoreConfig> for SlidingWindowCounterCore {
     /// Using [`From::from`] explicitly:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
+    /// use rate_guard_core::cores::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
     ///
     /// let config = SlidingWindowCounterCoreConfig {
     ///     capacity: 100,
@@ -499,7 +533,7 @@ impl From<SlidingWindowCounterCoreConfig> for SlidingWindowCounterCore {
     /// Using `.into()` with type inference:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
+    /// use rate_guard_core::cores::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
     ///
     /// let limiter: SlidingWindowCounterCore = SlidingWindowCounterCoreConfig {
     ///     capacity: 100,

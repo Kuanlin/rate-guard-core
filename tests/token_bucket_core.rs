@@ -1,5 +1,5 @@
 use rate_guard_core::{Uint, SimpleRateLimitError};
-use rate_guard_core::rate_limiters::TokenBucketCore;
+use rate_guard_core::cores::TokenBucketCore;
 
 #[test]
 fn test_new_token_bucket() {
@@ -193,22 +193,22 @@ fn test_saturating_operations() {
 // Add to tests/token_bucket_core.rs
 
 #[test]
-fn test_capacity_remaining() {
+fn test_capacity_remaining_or_0() {
     let bucket = TokenBucketCore::new(100, 10, 5);
     
     // Initial state should be full
-    assert_eq!(bucket.capacity_remaining(0).unwrap(), 100);
+    assert_eq!(bucket.capacity_remaining_or_0(0), 100);
     
     // Use some tokens
     assert_eq!(bucket.try_acquire_at(0, 30), Ok(()));
-    assert_eq!(bucket.capacity_remaining(0).unwrap(), 70);
+    assert_eq!(bucket.capacity_remaining_or_0(0), 70);
     
     // Use more tokens
     assert_eq!(bucket.try_acquire_at(0, 20), Ok(()));
-    assert_eq!(bucket.capacity_remaining(0).unwrap(), 50);
+    assert_eq!(bucket.capacity_remaining_or_0(0), 50);
     
     // Time passes, should refill
-    assert_eq!(bucket.capacity_remaining(10).unwrap(), 55); // 50 + 5 = 55
+    assert_eq!(bucket.capacity_remaining_or_0(10), 55); // 50 + 5 = 55
 }
 
 #[test]
@@ -224,12 +224,12 @@ fn test_current_capacity_no_refill() {
     // Even after time passes, current_capacity returns same value
     assert_eq!(bucket.current_capacity().unwrap(), 60);
     
-    // But capacity_remaining will trigger refill
-    assert_eq!(bucket.capacity_remaining(10).unwrap(), 65); // 60 + 5 = 65
+    // But capacity_remaining_or_0 will trigger refill
+    assert_eq!(bucket.capacity_remaining_or_0(10), 65); // 60 + 5 = 65
 }
 
 #[test]
-fn test_capacity_remaining_expired_tick() {
+fn test_capacity_remaining_or_0_expired_tick() {
     let bucket = TokenBucketCore::new(100, 10, 5);
     
     // Establish a time point
@@ -241,21 +241,21 @@ fn test_capacity_remaining_expired_tick() {
 }
 
 #[test]
-fn test_capacity_remaining_refill_behavior() {
+fn test_capacity_remaining_or_0_refill_behavior() {
     let bucket = TokenBucketCore::new(100, 10, 5);
     
     // Use all tokens
     assert_eq!(bucket.try_acquire_at(0, 100), Ok(()));
-    assert_eq!(bucket.capacity_remaining(0).unwrap(), 0);
+    assert_eq!(bucket.capacity_remaining_or_0(0), 0);
     
     // After one refill interval
-    assert_eq!(bucket.capacity_remaining(10).unwrap(), 5);
+    assert_eq!(bucket.capacity_remaining_or_0(10), 5);
     
     // After multiple refill intervals
-    assert_eq!(bucket.capacity_remaining(30).unwrap(), 15); // 0 + 3*5 = 15
+    assert_eq!(bucket.capacity_remaining_or_0(30), 15); // 0 + 3*5 = 15
     
     // Should not exceed capacity
-    assert_eq!(bucket.capacity_remaining(1000).unwrap(), 100);
+    assert_eq!(bucket.capacity_remaining_or_0(1000), 100);
 }
 
 #[test]
@@ -267,9 +267,9 @@ fn test_current_vs_remaining_consistency() {
     
     // Both should return same value at same tick
     assert_eq!(bucket.current_capacity().unwrap(), 60);
-    assert_eq!(bucket.capacity_remaining(0).unwrap(), 60);
+    assert_eq!(bucket.capacity_remaining_or_0(0), 60);
     
-    // After capacity_remaining triggers refill, current_capacity should reflect the update
-    assert_eq!(bucket.capacity_remaining(10).unwrap(), 65);
+    // After capacity_remaining_or_0 triggers refill, current_capacity should reflect the update
+    assert_eq!(bucket.capacity_remaining_or_0(10), 65);
     assert_eq!(bucket.current_capacity().unwrap(), 65);
 }

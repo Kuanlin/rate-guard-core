@@ -17,14 +17,14 @@ A comprehensive rate limiting library for Rust applications with multiple thread
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { version = "0.4.0" }
+rate-guard-core = { version = "0.5.0" }
 ```
 
 ### from Github
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.4.0" }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.0" }
 ```
 
 ---
@@ -36,13 +36,13 @@ If your application needs ultra-long durations or ultra-high precision, you can 
 ### from crate.io
 ```toml
 [dependencies]
-rate-guard-core = { version = "0.4.0", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { version = "0.5.0", default-features = false, features = ["tick_u128"] }
 ```
 
 ### from Github
 ```toml
 [dependencies]
-rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.4.0", default-features = false, features = ["tick_u128"] }
+rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.0", default-features = false, features = ["tick_u128"] }
 ```
 
 ---
@@ -176,9 +176,9 @@ let limiter: ApproximateSlidingWindowCore = ApproximateSlidingWindowCore::from(c
 ---
 
 ## Error Handling
-All limiters' try_acquire_at returns `SimpleAcquireResult`:
+All limiters' try_acquire_at returns `SimpleRateLimitResult`:
 ```Rust
-use rate_guard_core::{SimpleRateLimitError, SimpleAcquireResult};
+use rate_guard_core::{SimpleRateLimitError, SimpleRateLimitResult};
 match limiter.try_acquire_at(tick, 1) {
     Ok(()) => {
         // Request allowed
@@ -210,7 +210,7 @@ Each limiter also supports `try_acquire_verbose_at(tick, tokens)`, which returns
 - `InsufficientCapacity { acquiring, available, retry_after_ticks }`: Not enough tokens now, but suggests how long to wait before retrying
 
 ```Rust
-use rate_guard_core::{VerboseRateLimitError, VerboseAcquireResult};
+use rate_guard_core::{VerboseRateLimitError, VerboseRateLimitResult};
 
 match limiter.try_acquire_verbose_at(tick, 5) {
     Ok(()) => {

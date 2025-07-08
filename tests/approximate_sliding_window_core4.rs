@@ -1,5 +1,5 @@
 
-use rate_guard_core::rate_limiters::ApproximateSlidingWindowCore;
+use rate_guard_core::cores::ApproximateSlidingWindowCore;
 use rate_guard_core::Uint;
 use rate_guard_core::error::VerboseRateLimitError;
 

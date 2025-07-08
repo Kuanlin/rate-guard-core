@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
+use crate::{rate_limit::RateLimitCore, SimpleRateLimitResult, SimpleRateLimitError, Uint, VerboseRateLimitResult, VerboseRateLimitError};
 
 /// Core implementation of the leaky bucket rate limiting algorithm.
 ///
@@ -18,7 +18,7 @@ use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateL
 /// # Example
 ///
 /// ```rust
-/// use rate_guard_core::rate_limiters::LeakyBucketCore;
+/// use rate_guard_core::cores::LeakyBucketCore;
 ///
 /// // Create a bucket with capacity 100, leaking 5 tokens every 10 ticks
 /// let bucket = LeakyBucketCore::new(100, 10, 5);
@@ -54,7 +54,7 @@ struct LeakyBucketCoreState {
     last_leak_tick: Uint,
 }
 
-impl RateLimiterCore for LeakyBucketCore {
+impl RateLimitCore for LeakyBucketCore {
     /// Attempts to acquire the specified number of tokens at the given tick.
     ///
     /// This method is a wrapper around `try_acquire_at` for convenience.
@@ -66,10 +66,24 @@ impl RateLimiterCore for LeakyBucketCore {
     ///
     /// # Returns
     ///
-    /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason.
+    /// Returns [`SimpleRateLimitResult`] indicating success or specific failure reason.
     #[inline(always)]
-    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         self.try_acquire_at(tick, tokens)
+    }
+
+    /// Returns the number of tokens currently available for acquisition.
+    /// This method is a wrapper around `tokens_in_bucket` for convenience.
+    /// # Arguments
+    /// * `tick` - Current time tick for leak calculation.
+    /// # Returns
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining tokens available in current window
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards
+    #[inline(always)]
+    fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.capacity_remaining(tick)
     }
 
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
@@ -81,9 +95,8 @@ impl RateLimiterCore for LeakyBucketCore {
     /// # Returns
     ///
     /// The number of tokens currently available for acquisition, or 0 if error.
-    #[inline(always)]
-    fn capacity_remaining(&self, tick: Uint) -> Uint {
-        self.capacity_remaining(tick).unwrap_or(0)
+    fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining_or_0(tick)
     }
 
     /// Attempts to acquire tokens at the given tick, returning detailed diagnostics.
@@ -92,11 +105,11 @@ impl RateLimiterCore for LeakyBucketCore {
     /// * `tick` - Current time tick.
     /// * `tokens` - Number of tokens to acquire.
     /// # Returns
-    /// Returns [`VerboseAcquireResult`] indicating success or specific failure reason with diagnostics.
+    /// Returns [`VerboseRateLimitResult`] indicating success or specific failure reason with diagnostics.
     ///    
     /// # Example
     /// ```rust
-    /// use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// use rate_guard_core::cores::LeakyBucketCore;
     /// let bucket = LeakyBucketCore::new(100, 10, 5);
     /// let result = bucket.try_acquire_verbose_at(0, 30);
     /// if let Err(e) = result {
@@ -104,7 +117,7 @@ impl RateLimiterCore for LeakyBucketCore {
     /// }
     /// ```
     #[inline(always)]
-    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         self.try_acquire_verbose_at(tick, tokens)
     }
 }
@@ -125,7 +138,7 @@ impl LeakyBucketCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// use rate_guard_core::cores::LeakyBucketCore;
     ///
     /// // Bucket that holds 100 tokens, leaks 10 tokens every 5 ticks
     /// let bucket = LeakyBucketCore::new(100, 5, 10);
@@ -165,7 +178,7 @@ impl LeakyBucketCore {
     /// * `Err(SimpleRateLimitError::BeyondCapacity)` - if the requested tokens exceed maximum capacity
     /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the last operation.
     #[inline(always)]
-    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -231,7 +244,7 @@ impl LeakyBucketCore {
     /// * `Err(VerboseRateLimitError::BeyondCapacity)` - if the requested tokens exceed maximum capacity
     /// * `Err(VerboseRateLimitError::InsufficientCapacity)` - if not enough capacity is available
     #[inline(always)]
-    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         if tokens == 0 {
             return Ok(());
         }
@@ -297,7 +310,7 @@ impl LeakyBucketCore {
     ///
     /// # Example
     /// ```
-    /// # use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// # use rate_guard_core::cores::LeakyBucketCore;
     /// # use rate_guard_core::SimpleRateLimitError;
     /// # let current_tick = 0;
     /// let leaky = LeakyBucketCore::new(100, 10, 5);
@@ -346,7 +359,7 @@ impl LeakyBucketCore {
     ///
     /// # Example
     /// ```
-    /// # use rate_guard_core::rate_limiters::LeakyBucketCore;
+    /// # use rate_guard_core::cores::LeakyBucketCore;
     /// # use rate_guard_core::SimpleRateLimitError;
     /// # let leaky = LeakyBucketCore::new(100, 10, 5);
     /// # let current_tick = 0;
@@ -359,7 +372,18 @@ impl LeakyBucketCore {
             .map(|used| self.capacity.saturating_sub(used))
     }
 
-
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - Current time tick for leak calculation.
+    ///
+    /// # Returns
+    ///
+    /// The number of tokens currently available for acquisition, or 0 if error.
+    pub fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
 
     /// Gets the current token count without updating leak state.
     ///
@@ -379,6 +403,15 @@ impl LeakyBucketCore {
         };
 
         Ok(state.remaining)
+    }
+
+
+    /// Returns the current remaining capacity
+    /// This method is a convenience wrapper around `current_capacity`
+    /// that returns 0 if the capacity is not available.
+    #[inline(always)]
+    pub fn current_capacity_or_0(&self) -> Uint {
+        self.current_capacity().unwrap_or(0)
     }
 }
 
@@ -417,7 +450,7 @@ impl From<LeakyBucketCoreConfig> for LeakyBucketCore {
     /// Using [`From::from`] explicitly:
     ///
     /// ```rust
-    /// use rate_guard_core::rate_limiters::{LeakyBucketCore, LeakyBucketCoreConfig};
+    /// use rate_guard_core::cores::{LeakyBucketCore, LeakyBucketCoreConfig};
     ///
     /// let config = LeakyBucketCoreConfig {
     ///     capacity: 100,
@@ -431,7 +464,7 @@ impl From<LeakyBucketCoreConfig> for LeakyBucketCore {
     /// Using `.into()` with type inference:
     ///
     /// ```rust
-    /// use rate_guard_core::rate_limiters::{LeakyBucketCore, LeakyBucketCoreConfig};
+    /// use rate_guard_core::cores::{LeakyBucketCore, LeakyBucketCoreConfig};
     ///
     /// let limiter: LeakyBucketCore = LeakyBucketCoreConfig {
     ///     capacity: 100,

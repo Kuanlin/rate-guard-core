@@ -17,14 +17,14 @@
 //! Add to your `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { version = "0.4.0" }
+//! rate-guard-core = { version = "0.5.0" }
 //! ```
 //!
 //! ### from Github
 //! Add to your `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.4.0" }
+//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.0" }
 //! ```
 //!
 //! ---
@@ -36,13 +36,13 @@
 //! ### from crate.io
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { version = "0.4.0", default-features = false, features = ["tick_u128"] }
+//! rate-guard-core = { version = "0.5.0", default-features = false, features = ["tick_u128"] }
 //! ```
 //!
 //! ### from Github
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.4.0", default-features = false, features = ["tick_u128"] }
+//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.0", default-features = false, features = ["tick_u128"] }
 //! ```
 //!
 //! ---
@@ -53,7 +53,7 @@
 //! Perfect for APIs that allow occasional bursts while maintaining average rate:
 //!
 //! ```rust
-//! use rate_guard_core::rate_limiters::{TokenBucketCore, TokenBucketCoreConfig};
+//! use rate_guard_core::cores::{TokenBucketCore, TokenBucketCoreConfig};
 //!
 //! let config = TokenBucketCoreConfig {
 //!     capacity: 100,
@@ -71,7 +71,7 @@
 //! Great for maintaining steady traffic flow:
 //!
 //! ```rust
-//! use rate_guard_core::rate_limiters::{LeakyBucketCore, LeakyBucketCoreConfig};
+//! use rate_guard_core::cores::{LeakyBucketCore, LeakyBucketCoreConfig};
 //!
 //! let config = LeakyBucketCoreConfig {
 //!     capacity: 50,
@@ -88,7 +88,7 @@
 //! ### Fixed Window Counter
 //!
 //! ```rust
-//! use rate_guard_core::rate_limiters::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
+//! use rate_guard_core::cores::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
 //!
 //! let config = FixedWindowCounterCoreConfig {
 //!     capacity: 100,
@@ -103,7 +103,7 @@
 //! ### Sliding Window Counter
 //!
 //! ```rust
-//! use rate_guard_core::rate_limiters::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
+//! use rate_guard_core::cores::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
 //!
 //! let config = SlidingWindowCounterCoreConfig {
 //!     capacity: 100,
@@ -122,7 +122,7 @@
 //! `Used = (1 - X%) * lastWindow + currentWindow` where X is the proportion of request time within the current window.
 //!
 //! ```rust
-//! use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+//! use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
 //!
 //! let config = ApproximateSlidingWindowCoreConfig {
 //!     capacity: 100,
@@ -145,7 +145,7 @@
 //! `Used = (1 - X%) * lastWindow + currentWindow` where X is the proportion of request time within the current window.
 //!
 //! ```rust
-//! use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+//! use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
 //!
 //! let config = ApproximateSlidingWindowCoreConfig {
 //!     capacity: 100,
@@ -157,9 +157,9 @@
 //! ---
 //!
 //! ## Error Handling
-//! All limiters' try_acquire_at returns `SimpleAcquireResult`:
+//! All limiters' try_acquire_at returns `SimpleRateLimitResult`:
 //! ```Rust
-//! use rate_guard_core::{SimpleRateLimitError, SimpleAcquireResult};
+//! use rate_guard_core::{SimpleRateLimitError, SimpleRateLimitResult};
 //! match limiter.try_acquire_at(tick, 1) {
 //!     Ok(()) => {
 //!         // Request allowed
@@ -191,7 +191,7 @@
 //! - `InsufficientCapacity { acquiring, available, retry_after_ticks }`: Not enough tokens now, but suggests how long to wait before retrying
 //!
 //! ```Rust
-//! use rate_guard_core::{VerboseRateLimitError, VerboseAcquireResult};
+//! use rate_guard_core::{VerboseRateLimitError, VerboseRateLimitResult};
 //!
 //! match limiter.try_acquire_verbose_at(tick, 5) {
 //!     Ok(()) => {
@@ -227,7 +227,7 @@
 //! ```Rust
 //! use std::sync::Arc;
 //! use std::thread;
-//! use rate_guard_core::rate_limiters::TokenBucketCore;
+//! use rate_guard_core::cores::TokenBucketCore;
 //! let limiter = Arc::new(TokenBucketCore::new(100, 1, 10));
 //! for _ in 0..10 {
 //!     let limiter = limiter.clone();
@@ -251,12 +251,12 @@
 //! Contributions are welcome! Please feel free to submit a Pull Request.
 
 pub mod types;
-pub mod rate_limiters;
-pub mod rate_limiter_core;
+pub mod cores;
+pub mod rate_limit;
 pub mod error; // 新增
 
 pub use types::Uint;
 pub use error::{
     SimpleRateLimitError, VerboseRateLimitError,
-    SimpleAcquireResult, VerboseAcquireResult,
+    SimpleRateLimitResult, VerboseRateLimitResult,
 };

@@ -1,5 +1,5 @@
 use rate_guard_core::Uint;
-use rate_guard_core::rate_limiters::TokenBucketCore;
+use rate_guard_core::cores::TokenBucketCore;
 use rate_guard_core::error::VerboseRateLimitError;
 
 fn new_token_bucket(cap: Uint, interval: Uint, amount: Uint) -> TokenBucketCore {

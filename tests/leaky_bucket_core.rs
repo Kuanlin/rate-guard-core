@@ -1,5 +1,5 @@
 use rate_guard_core::{Uint, SimpleRateLimitError};
-use rate_guard_core::rate_limiters::LeakyBucketCore;
+use rate_guard_core::cores::LeakyBucketCore;
 
 #[test]
 fn test_new_leaky_bucket() {

@@ -1,6 +1,6 @@
 use std::sync::Mutex;
-use crate::{SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
-use crate::rate_limiter_core::RateLimiterCore;
+use crate::{SimpleRateLimitResult, SimpleRateLimitError, Uint, VerboseRateLimitResult, VerboseRateLimitError};
+use crate::rate_limit::RateLimitCore;
 
 /// Core implementation of the token bucket rate limiting algorithm.
 ///
@@ -20,7 +20,7 @@ use crate::rate_limiter_core::RateLimiterCore;
 /// # Example
 ///
 /// ```rust
-/// use rate_guard_core::rate_limiters::TokenBucketCore;
+/// use rate_guard_core::cores::TokenBucketCore;
 ///
 /// // Create a bucket with capacity 100, refilling 5 tokens every 10 ticks
 /// let bucket = TokenBucketCore::new(100, 10, 5);
@@ -53,7 +53,7 @@ struct TokenBucketCoreState {
     last_refill_tick: Uint,
 }
 
-impl RateLimiterCore for TokenBucketCore {
+impl RateLimitCore for TokenBucketCore {
     /// Attempts to acquire the specified number of tokens at the given tick.
     ///
     /// This method is a wrapper that calls the main `try_acquire_at` logic.
@@ -63,9 +63,9 @@ impl RateLimiterCore for TokenBucketCore {
     /// * `tick` - Current time tick
     ///
     /// # Returns
-    /// Returns [`SimpleAcquireResult`] indicating success or error type.
+    /// Returns [`SimpleRateLimitResult`] indicating success or error type.
     #[inline(always)]
-    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         self.try_acquire_at(tick, tokens)
     }
     /// Attempts to acquire tokens at the given tick, returning detailed diagnostics.
@@ -76,11 +76,11 @@ impl RateLimiterCore for TokenBucketCore {
     /// * `tick` - Current time tick
     /// * `tokens` - Number of tokens to acquire
     /// # Returns
-    /// Returns [`VerboseAcquireResult`] indicating success or error type.
+    /// Returns [`VerboseRateLimitResult`] indicating success or error type.
     /// 
     /// # Example
     /// ```rust
-    /// use rate_guard_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::cores::TokenBucketCore;
     /// use rate_guard_core::VerboseRateLimitError;
     /// let bucket = TokenBucketCore::new(100, 10, 5);
     /// let tick = 20;
@@ -93,9 +93,24 @@ impl RateLimiterCore for TokenBucketCore {
     /// }
     ///```
     #[inline(always)]
-    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         self.try_acquire_verbose_at(tick, tokens)
     }
+
+    /// Gets the current number of tokens remaining in the bucket.
+    /// This method updates the bucket state based on elapsed time (performs refill),
+    /// then returns the current number of available tokens.
+    /// # Arguments
+    /// * `tick` - Current time tick for refill calculation
+    /// # Returns
+    /// * `Ok(available_tokens)` - Current number of available tokens
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards
+    #[inline(always)]
+    fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.capacity_remaining(tick)
+    }
+
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
     ///
     /// # Arguments
@@ -104,8 +119,8 @@ impl RateLimiterCore for TokenBucketCore {
     /// # Returns
     /// Number of available tokens or 0 if error.
     #[inline(always)]
-    fn capacity_remaining(&self, tick: Uint) -> Uint {
-        self.capacity_remaining(tick).unwrap_or(0)
+    fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining_or_0(tick)
     }
 }
 
@@ -125,7 +140,7 @@ impl TokenBucketCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_guard_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::cores::TokenBucketCore;
     ///
     /// let bucket = TokenBucketCore::new(100, 5, 10);
     /// ```
@@ -161,7 +176,7 @@ impl TokenBucketCore {
     /// * `Err(SimpleRateLimitError::ContentionFailure)` - If unable to acquire the internal lock
     /// * `Err(SimpleRateLimitError::ExpiredTick)` - If the tick is older than the last operation
     #[inline(always)]
-    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -230,7 +245,7 @@ impl TokenBucketCore {
     ///
     /// # Example
     /// ```
-    /// use rate_guard_core::rate_limiters::TokenBucketCore;
+    /// use rate_guard_core::cores::TokenBucketCore;
     /// use rate_guard_core::VerboseRateLimitError;
     ///
     /// let bucket = TokenBucketCore::new(100, 10, 5);
@@ -245,7 +260,7 @@ impl TokenBucketCore {
     /// }
     /// ```
     #[inline(always)]
-    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         if tokens == 0 {
             return Ok(());
         }
@@ -343,6 +358,19 @@ impl TokenBucketCore {
         Ok(state.available)
     }
 
+
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    /// * `tick` - Current time tick for refill calculation
+    ///
+    /// # Returns
+    /// Number of available tokens or 0 if error.
+    #[inline(always)]
+    pub fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
+
     /// Gets the current token capacity without updating refill state.
     ///
     /// This method returns the current number of tokens in the bucket without
@@ -360,6 +388,15 @@ impl TokenBucketCore {
         };
 
         Ok(state.available)
+    }
+
+
+    /// Returns the current remaining capacity
+    /// This method is a convenience wrapper around `current_capacity`
+    /// that returns 0 if the capacity is not available.
+    #[inline(always)]
+    pub fn current_capacity_or_0(&self) -> Uint {
+        self.current_capacity().unwrap_or(0)
     }
 }
 
@@ -397,7 +434,7 @@ impl From<TokenBucketCoreConfig> for TokenBucketCore {
     /// Using [`From::from`] explicitly:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{TokenBucketCore, TokenBucketCoreConfig};
+    /// use rate_guard_core::cores::{TokenBucketCore, TokenBucketCoreConfig};
     ///
     /// let config = TokenBucketCoreConfig {
     ///     capacity: 100,
@@ -411,7 +448,7 @@ impl From<TokenBucketCoreConfig> for TokenBucketCore {
     /// Using `.into()` with type inference:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{TokenBucketCore, TokenBucketCoreConfig};
+    /// use rate_guard_core::cores::{TokenBucketCore, TokenBucketCoreConfig};
     ///
     /// let limiter: TokenBucketCore = TokenBucketCoreConfig {
     ///     capacity: 100,

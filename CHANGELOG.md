@@ -1,3 +1,22 @@
+## [0.5.0] - 2025-07-08
+
+### Changed
+
+- Renamed module directory from `rate_limiters/` to `cores/`
+- Renamed `rate_limiter_core.rs` to `rate_limits.rs`
+- Renamed result type aliases:
+  - `SimpleAcquireResult` → `SimpleRateLimitResult`
+  - `VerboseAcquireResult` → `VerboseRateLimitResult`
+- `RateLimitCore::capacity_remaining()` now returns `Result<Uint, SimpleRateLimitError>`
+
+### Added
+
+- `capacity_remaining_or_0(tick)` fallback method for all limiters
+- `current_capacity_or_0()` to retrieve approximate capacity without error handling
+
+> This version introduces breaking changes and increases the minor version to `0.5.0` from `0.4.0` per semantic versioning policy.
+
+
 ## [0.4.0] - 2025-07-07
 
 ### Changed
@@ -37,7 +56,7 @@
 ## [0.2.1] - Unreleased (inferred from commits)
 
 ### Added
-- Completed `RateLimiterCore` trait implementation for all algorithms.
+- Completed `RateLimitCore` trait implementation for all algorithms.
 - Added and implemented trait methods across cores.
 
 

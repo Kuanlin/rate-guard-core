@@ -1,7 +1,7 @@
 // tests/rate_limiter_core_leaky_bucket.rs
 
 use rate_guard_core::Uint;
-use rate_guard_core::rate_limiters::LeakyBucketCore;
+use rate_guard_core::cores::LeakyBucketCore;
 use rate_guard_core::error::VerboseRateLimitError;
 
 

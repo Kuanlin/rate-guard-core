@@ -1,5 +1,5 @@
 use rate_guard_core::{ SimpleRateLimitError};
-use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
+use rate_guard_core::cores::SlidingWindowCounterCore;
 
 #[test]
 fn test_new_sliding_window_counter() {
@@ -230,23 +230,23 @@ fn test_window_edge_cases() {
 // Add to tests/sliding_window_counter_core.rs
 
 #[test]
-fn test_capacity_remaining() {
+fn test_capacity_remaining_or_0() {
     let counter = SlidingWindowCounterCore::new(100, 5, 4); // window_ticks = 20
     
     // Initial state should have full capacity
-    assert_eq!(counter.capacity_remaining(0).unwrap(), 100);
+    assert_eq!(counter.capacity_remaining_or_0(0), 100);
     
     // Use tokens in bucket 0 [0-4]
     assert_eq!(counter.try_acquire_at(2, 30), Ok(()));
-    assert_eq!(counter.capacity_remaining(2).unwrap(), 70);
+    assert_eq!(counter.capacity_remaining_or_0(2), 70);
     
     // Use tokens in bucket 1 [5-9]
     assert_eq!(counter.try_acquire_at(7, 25), Ok(()));
-    assert_eq!(counter.capacity_remaining(7).unwrap(), 45); // 100 - 30 - 25 = 45
+    assert_eq!(counter.capacity_remaining_or_0(7), 45); // 100 - 30 - 25 = 45
     
     // Use tokens in bucket 2 [10-14]
     assert_eq!(counter.try_acquire_at(12, 20), Ok(()));
-    assert_eq!(counter.capacity_remaining(12).unwrap(), 25); // 100 - 30 - 25 - 20 = 25
+    assert_eq!(counter.capacity_remaining_or_0(12), 25); // 100 - 30 - 25 - 20 = 25
 }
 
 #[test]
@@ -262,8 +262,8 @@ fn test_current_capacity_no_bucket_update() {
     // Even after time passes, current_capacity returns same value
     assert_eq!(counter.current_capacity().unwrap(), 60);
     
-    // But capacity_remaining might trigger bucket updates
-    assert_eq!(counter.capacity_remaining(10).unwrap(), 60); // Bucket 0 might expire
+    // But capacity_remaining_or_0 might trigger bucket updates
+    assert_eq!(counter.capacity_remaining_or_0(10), 60); // Bucket 0 might expire
 }
 
 #[test]
@@ -281,7 +281,7 @@ fn test_current_capacity_at() {
 }
 
 #[test]
-fn test_capacity_remaining_expired_tick() {
+fn test_capacity_remaining_or_0_expired_tick() {
     let counter = SlidingWindowCounterCore::new(100, 5, 4);
     
     // Establish a time point
@@ -298,14 +298,14 @@ fn test_sliding_window_expiry2() {
     
     // Use tokens in bucket 0 [0-4]
     assert_eq!(counter.try_acquire_at(2, 40), Ok(()));
-    assert_eq!(counter.capacity_remaining(2).unwrap(), 60);
+    assert_eq!(counter.capacity_remaining_or_0(2), 60);
     
     // tick 25: sliding window [5, 25], bucket 0 [0-4] should expire
-    assert_eq!(counter.capacity_remaining(25).unwrap(), 100); // Bucket 0 expired, full capacity available
+    assert_eq!(counter.capacity_remaining_or_0(25), 100); // Bucket 0 expired, full capacity available
     
     // Use tokens in current bucket
     assert_eq!(counter.try_acquire_at(25, 30), Ok(()));
-    assert_eq!(counter.capacity_remaining(25).unwrap(), 70);
+    assert_eq!(counter.capacity_remaining_or_0(25), 70);
 }
 
 #[test]
@@ -314,15 +314,15 @@ fn test_bucket_lazy_reset2() {
     
     // Use tokens in bucket 0 [0-4]
     assert_eq!(counter.try_acquire_at(2, 30), Ok(()));
-    assert_eq!(counter.capacity_remaining(2).unwrap(), 70);
+    assert_eq!(counter.capacity_remaining_or_0(2), 70);
     
     // Use tokens in bucket 1 [5-9]
     assert_eq!(counter.try_acquire_at(7, 25), Ok(()));
-    assert_eq!(counter.capacity_remaining(7).unwrap(), 45);
+    assert_eq!(counter.capacity_remaining_or_0(7), 45);
     
     //[10-14] is bucket 0, [15-19] is bucket 1
     // tick 20: bucket 0 new cycle [20-24], should reset bucket 0
-    assert_eq!(counter.capacity_remaining(10).unwrap(), 75); // Only bucket 1 [5-9] within window [10, 20]
+    assert_eq!(counter.capacity_remaining_or_0(10), 75); // Only bucket 1 [5-9] within window [10, 20]
 }
 
 #[test]
@@ -334,10 +334,10 @@ fn test_current_vs_remaining_consistency() {
     
     // Both should return same value initially
     assert_eq!(counter.current_capacity().unwrap(), 60);
-    assert_eq!(counter.capacity_remaining(2).unwrap(), 60);
+    assert_eq!(counter.capacity_remaining_or_0(2), 60);
     
-    // After capacity_remaining potentially triggers updates, check consistency
-    assert_eq!(counter.capacity_remaining(25).unwrap(), 100); // Bucket might expire
+    // After capacity_remaining_or_0 potentially triggers updates, check consistency
+    assert_eq!(counter.capacity_remaining_or_0(25), 100); // Bucket might expire
     // current_capacity doesn't account for expiry, so might differ
 }
 
@@ -347,17 +347,17 @@ fn test_multiple_bucket_cycles2() {
     
     // Use tokens in bucket 0 [0-4]
     assert_eq!(counter.try_acquire_at(2, 20), Ok(()));
-    assert_eq!(counter.capacity_remaining(2).unwrap(), 60);
+    assert_eq!(counter.capacity_remaining_or_0(2), 60);
     
     // Use tokens in bucket 1 [5-9]
     assert_eq!(counter.try_acquire_at(7, 25), Ok(()));
-    assert_eq!(counter.capacity_remaining(7).unwrap(), 35); // 80 - 20 - 25 = 35
+    assert_eq!(counter.capacity_remaining_or_0(7), 35); // 80 - 20 - 25 = 35
     
     // tick 12: sliding window [2, 12], bucket 0 [0-4] expires
-    assert_eq!(counter.capacity_remaining(12).unwrap(), 55); // Only bucket 1 within window
+    assert_eq!(counter.capacity_remaining_or_0(12), 55); // Only bucket 1 within window
     
     // tick 17: sliding window [7, 17], bucket 1 [5-9] expires
-    assert_eq!(counter.capacity_remaining(17).unwrap(), 80); // Both buckets expired
+    assert_eq!(counter.capacity_remaining_or_0(17), 80); // Both buckets expired
 }
 
 #[test]
@@ -365,12 +365,12 @@ fn test_single_bucket_configuration() {
     let counter = SlidingWindowCounterCore::new(50, 10, 1); // window_ticks = 10
     
     // Only one bucket, all operations use bucket 0
-    assert_eq!(counter.capacity_remaining(5).unwrap(), 50);
+    assert_eq!(counter.capacity_remaining_or_0(5), 50);
     assert_eq!(counter.try_acquire_at(5, 25), Ok(()));
-    assert_eq!(counter.capacity_remaining(5).unwrap(), 25);
+    assert_eq!(counter.capacity_remaining_or_0(5), 25);
     
     // tick 15: bucket 0 new cycle [10-19], old bucket [0-9] expires
-    assert_eq!(counter.capacity_remaining(15).unwrap(), 50); // Reset to full capacity
+    assert_eq!(counter.capacity_remaining_or_0(15), 50); // Reset to full capacity
 }
 
 #[test]
@@ -381,11 +381,11 @@ fn test_window_boundary_conditions() {
     assert_eq!(counter.try_acquire_at(5, 20), Ok(()));
     
     // tick 35: sliding window [5, 35], bucket 0 [0-9] should expire
-    assert_eq!(counter.capacity_remaining(35).unwrap(), 60); // Full capacity
+    assert_eq!(counter.capacity_remaining_or_0(35), 60); // Full capacity
     
     // tick 39: sliding window [9, 39], bucket 0 [0-9] still expires
-    assert_eq!(counter.capacity_remaining(39).unwrap(), 60);
+    assert_eq!(counter.capacity_remaining_or_0(39), 60);
     
     // tick 40: sliding window [10, 40], bucket 0 [0-9] definitely expires
-    assert_eq!(counter.capacity_remaining(40).unwrap(), 60);
+    assert_eq!(counter.capacity_remaining_or_0(40), 60);
 }

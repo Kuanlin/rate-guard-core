@@ -14,7 +14,7 @@ pub enum SimpleRateLimitError {
 }
 
 /// Result type for fast-path rate limiting.
-pub type SimpleAcquireResult = Result<(), SimpleRateLimitError>;
+pub type SimpleRateLimitResult = Result<(), SimpleRateLimitError>;
 
 /// Error type for verbose rate limiting. Contains diagnostic information.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub enum VerboseRateLimitError {
 }
 
 /// Result type for verbose rate limiting.
-pub type VerboseAcquireResult = Result<(), VerboseRateLimitError>;
+pub type VerboseRateLimitResult = Result<(), VerboseRateLimitError>;
 
 // Display trait for SimpleRateLimitError
 impl fmt::Display for SimpleRateLimitError {

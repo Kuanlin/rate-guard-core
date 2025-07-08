@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateLimitError, Uint, VerboseAcquireResult, VerboseRateLimitError};
+use crate::{rate_limit::RateLimitCore, SimpleRateLimitResult, SimpleRateLimitError, Uint, VerboseRateLimitResult, VerboseRateLimitError};
 
 /// Core implementation of the fixed window counter rate limiting algorithm.
 ///
@@ -26,7 +26,7 @@ use crate::{rate_limiter_core::RateLimiterCore, SimpleAcquireResult, SimpleRateL
 /// # Example
 ///
 /// ```rust
-/// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+/// use rate_guard_core::cores::FixedWindowCounterCore;
 ///
 /// // Create a counter with capacity 100 per window of 10 ticks
 /// let counter = FixedWindowCounterCore::new(100, 10);
@@ -59,7 +59,7 @@ struct FixedWindowCounterCoreState {
 
 /// Core trait implementation for the fixed window counter.
 /// This provides the basic operations needed by the rate limiter core trait.
-impl RateLimiterCore for FixedWindowCounterCore {
+impl RateLimitCore for FixedWindowCounterCore {
     /// Attempts to acquire the specified number of tokens at the given tick.
     ///
     /// This method is a wrapper around `try_acquire_at` for convenience.
@@ -71,9 +71,9 @@ impl RateLimiterCore for FixedWindowCounterCore {
     ///
     /// # Returns
     ///
-    /// Returns [`SimpleAcquireResult`] indicating success or specific failure reason. 
+    /// Returns [`SimpleRateLimitResult`] indicating success or specific failure reason. 
     #[inline(always)]
-    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         self.try_acquire_at(tick, tokens)
     }
 
@@ -83,11 +83,11 @@ impl RateLimiterCore for FixedWindowCounterCore {
     /// * `tick` - Current time tick for the operation
     /// * `tokens` - Number of tokens to acquire
     /// # Returns
-    /// Returns [`VerboseAcquireResult`] with detailed information on success or failure.
+    /// Returns [`VerboseRateLimitResult`] with detailed information on success or failure.
     /// This includes current available tokens, required wait time, and more.
     /// # Example
     /// ```rust
-    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::cores::FixedWindowCounterCore;
     /// use rate_guard_core::VerboseRateLimitError;
     /// let counter = FixedWindowCounterCore::new(100, 10);
     /// let tick = 5;
@@ -100,10 +100,26 @@ impl RateLimiterCore for FixedWindowCounterCore {
     /// }
     /// ```
     #[inline(always)]
-    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         self.try_acquire_verbose_at(tick, tokens)
     }
     
+    /// Gets the current remaining token capacity in the current window.
+    /// 
+    /// This method updates the window state based on current tick (resets counter
+    /// if a new window has started), then returns the remaining capacity in the
+    /// current window.
+    /// # Arguments
+    /// * `tick` - Current time tick for window calculation
+    /// # Returns
+    /// * `Ok(remaining_capacity)` - Remaining tokens available in current window
+    /// * `Err(SimpleRateLimitError::ContentionFailure)` - Unable to acquire internal lock
+    /// * `Err(SimpleRateLimitError::ExpiredTick)` - Time went backwards
+    #[inline(always)]
+    fn capacity_remaining(&self, tick: Uint) -> Result<Uint, SimpleRateLimitError> {
+        self.capacity_remaining(tick)
+    }
+
     /// Returns the number of tokens that can still be acquired without exceeding capacity.
     ///
     /// # Arguments
@@ -114,8 +130,8 @@ impl RateLimiterCore for FixedWindowCounterCore {
     ///
     /// The number of tokens currently available for acquisition, or 0 if error.
     #[inline(always)]
-    fn capacity_remaining(&self, tick: Uint) -> Uint {
-        self.capacity_remaining(tick).unwrap_or(0)
+    fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining_or_0(tick)
     }
 }
 
@@ -135,7 +151,7 @@ impl FixedWindowCounterCore {
     /// # Example
     ///
     /// ```rust
-    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::cores::FixedWindowCounterCore;
     /// let counter = FixedWindowCounterCore::new(50, 20);
     /// ```
     pub fn new(capacity: Uint, window_ticks: Uint) -> Self {
@@ -174,7 +190,7 @@ impl FixedWindowCounterCore {
     /// the counter automatically resets to zero and the window start time is updated.
     /// This allows for immediate full capacity usage in the new window.
     #[inline(always)]
-    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleAcquireResult {
+    pub fn try_acquire_at(&self, tick: Uint,tokens: Uint) -> SimpleRateLimitResult {
         // Early return for zero tokens - always succeeds
         if tokens == 0 {
             return Ok(());
@@ -240,7 +256,7 @@ impl FixedWindowCounterCore {
     ///
     /// # Example
     /// ```
-    /// use rate_guard_core::rate_limiters::FixedWindowCounterCore;
+    /// use rate_guard_core::cores::FixedWindowCounterCore;
     /// use rate_guard_core::VerboseRateLimitError;
     ///
     /// let limiter = FixedWindowCounterCore::new(100, 10); // 100 tokens per 10-tick window
@@ -255,7 +271,7 @@ impl FixedWindowCounterCore {
     /// }
     /// ```
     #[inline(always)]
-    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseAcquireResult {
+    pub fn try_acquire_verbose_at(&self, tick: Uint, tokens: Uint) -> VerboseRateLimitResult {
         if tokens == 0 {
             return Ok(());
         }
@@ -343,6 +359,20 @@ impl FixedWindowCounterCore {
         Ok(self.capacity.saturating_sub(state.count))
     }
 
+    /// Returns the number of tokens that can still be acquired without exceeding capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - Current time tick for leak calculation.
+    ///
+    /// # Returns
+    ///
+    /// The number of tokens currently available for acquisition, or 0 if error.
+    #[inline(always)]
+    pub fn capacity_remaining_or_0(&self, tick: Uint) -> Uint {
+        self.capacity_remaining(tick).unwrap_or(0)
+    }
+
     /// Gets the current remaining capacity without updating window state.
     ///
     /// This method simply returns the remaining tokens that can be acquired in
@@ -361,6 +391,15 @@ impl FixedWindowCounterCore {
 
         Ok(self.capacity.saturating_sub(state.count))
     }
+
+    /// Returns the current remaining capacity
+    /// This method is a convenience wrapper around `current_capacity`
+    /// that returns 0 if the capacity is not available.
+    #[inline(always)]
+    pub fn current_capacity_or_0(&self) -> Uint {
+        self.current_capacity().unwrap_or(0)
+    }
+
 }
 
 /// Configuration structure for creating a `FixedWindowCounterCore` limiter.
@@ -391,7 +430,7 @@ impl From<FixedWindowCounterCoreConfig> for FixedWindowCounterCore {
     /// Using [`From::from`] explicitly:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
+    /// use rate_guard_core::cores::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
     ///
     /// let config = FixedWindowCounterCoreConfig {
     ///     capacity: 100,
@@ -404,7 +443,7 @@ impl From<FixedWindowCounterCoreConfig> for FixedWindowCounterCore {
     /// Using `.into()` with type inference:
     ///
     /// ```
-    /// use rate_guard_core::rate_limiters::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
+    /// use rate_guard_core::cores::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
     ///
     /// let limiter: FixedWindowCounterCore = FixedWindowCounterCoreConfig {
     ///     capacity: 100,

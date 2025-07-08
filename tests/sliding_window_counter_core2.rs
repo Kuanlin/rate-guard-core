@@ -1,5 +1,5 @@
 use rate_guard_core::{SimpleRateLimitError};
-use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
+use rate_guard_core::cores::SlidingWindowCounterCore;
 
 #[test]
 fn test_contention_failure() {

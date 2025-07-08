@@ -2,21 +2,21 @@
 
 use std::sync::Arc;
 
-use rate_guard_core::{SimpleRateLimitError, SimpleAcquireResult};
-use rate_guard_core::rate_limiter_core::RateLimiterCore;
-use rate_guard_core::rate_limiters::SlidingWindowCounterCore;
+use rate_guard_core::{SimpleRateLimitError, SimpleRateLimitResult};
+use rate_guard_core::rate_limit::RateLimitCore;
+use rate_guard_core::cores::SlidingWindowCounterCore;
 
-/// Helper function to create a SlidingWindowCounterCore as RateLimiterCore
-fn create_sliding_window_limiter(capacity: u64, bucket_ticks: u64, bucket_count: u64) -> Box<dyn RateLimiterCore> {
+/// Helper function to create a SlidingWindowCounterCore as RateLimitCore
+fn create_sliding_window_limiter(capacity: u64, bucket_ticks: u64, bucket_count: u64) -> Box<dyn RateLimitCore> {
     Box::new(SlidingWindowCounterCore::new(capacity, bucket_ticks, bucket_count))
 }
 #[test]
 fn test_rate_limiter_core_sliding_basics() {
     // 4 buckets of 5 ticks each = 20 tick sliding window
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(100, 5, 4);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(100, 5, 4);
     
     // Initial capacity
-    assert_eq!(limiter.capacity_remaining(0), 100);
+    assert_eq!(limiter.capacity_remaining_or_0(0), 100);
     
     // Use tokens across different buckets
     assert_eq!(limiter.try_acquire_at(0, 25), Ok(()));   // bucket 0 [0-4]
@@ -25,60 +25,60 @@ fn test_rate_limiter_core_sliding_basics() {
     assert_eq!(limiter.try_acquire_at(15, 25), Ok(()));  // bucket 3 [15-19]
     
     // Window is full
-    assert_eq!(limiter.capacity_remaining(15), 0);
+    assert_eq!(limiter.capacity_remaining_or_0(15), 0);
     assert_eq!(limiter.try_acquire_at(15, 1), Err(SimpleRateLimitError::InsufficientCapacity));
 }
 
 #[test]
 fn test_rate_limiter_core_sliding_expiry() {
     // 3 buckets of 10 ticks = 30 tick window
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(100, 10, 3);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(100, 10, 3);
     
     // Fill bucket 0 [0-9]
     assert_eq!(limiter.try_acquire_at(5, 40), Ok(()));
-    assert_eq!(limiter.capacity_remaining(5), 60);
+    assert_eq!(limiter.capacity_remaining_or_0(5), 60);
     
     // Fill bucket 1 [10-19]
     assert_eq!(limiter.try_acquire_at(15, 30), Ok(()));
-    assert_eq!(limiter.capacity_remaining(15), 30);
+    assert_eq!(limiter.capacity_remaining_or_0(15), 30);
     
     // At tick 35, sliding window is [5, 35] (35.saturating_sub(30) = 5)
     // Bucket 0 [0-9] is still in window (start_tick=0 >= 5? NO)
     // Actually, the window_start_tick calculation seems to be tick.saturating_sub(window_ticks)
     // So at tick 35: window_start = 35 - 30 = 5
     // Bucket 0: start_tick=0 < 5, so NOT in window
-    assert_eq!(limiter.capacity_remaining(35), 70); // Only bucket 1 counts
+    assert_eq!(limiter.capacity_remaining_or_0(35), 70); // Only bucket 1 counts
     
     // Can use freed capacity
     assert_eq!(limiter.try_acquire_at(35, 70), Ok(()));
-    assert_eq!(limiter.capacity_remaining(35), 0);
+    assert_eq!(limiter.capacity_remaining_or_0(35), 0);
 }
 
 #[test]
 fn test_rate_limiter_core_bucket_rotation() {
     // 2 buckets of 5 ticks = 10 tick sliding window
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(80, 5, 2);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(80, 5, 2);
     
     // Bucket 0 [0-4]
     assert_eq!(limiter.try_acquire_at(2, 30), Ok(()));
     
     // Bucket 1 [5-9]  
     assert_eq!(limiter.try_acquire_at(7, 40), Ok(()));
-    assert_eq!(limiter.capacity_remaining(9), 10); // 80 - 30 - 40 = 10
+    assert_eq!(limiter.capacity_remaining_or_0(9), 10); // 80 - 30 - 40 = 10
     
     // At tick 10: bucket 0 resets, gets 10 tokens
     assert_eq!(limiter.try_acquire_at(10, 10), Ok(()));
-    assert_eq!(limiter.capacity_remaining(10), 30); // 80 - 40 - 10 = 30, not 0!
+    assert_eq!(limiter.capacity_remaining_or_0(10), 30); // 80 - 40 - 10 = 30, not 0!
     
     // At tick 15: bucket 1 resets (loses 40 tokens)
     // Only bucket 0 (10 tokens) remains in window
-    assert_eq!(limiter.capacity_remaining(15), 70); // 80 - 10 = 70
+    assert_eq!(limiter.capacity_remaining_or_0(15), 70); // 80 - 10 = 70
 }
 
 #[test]
 fn test_rate_limiter_core_precise_window() {
     // 4 buckets of 3 ticks = 12 tick window
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(60, 3, 4);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(60, 3, 4);
     
     // Distribute tokens across buckets
     assert_eq!(limiter.try_acquire_at(1, 15), Ok(()));   // bucket 0 [0-2]
@@ -98,7 +98,7 @@ fn test_rate_limiter_core_precise_window() {
     // Bucket 2: start_tick=6, 15 tokens → in window
     // Bucket 3: start_tick=9, 15 tokens → in window
     // Total used = 0 + 15 + 15 + 15 = 45, remaining = 60 - 45 = 15
-    assert_eq!(limiter.capacity_remaining(12), 15);
+    assert_eq!(limiter.capacity_remaining_or_0(12), 15);
     
     // At tick 15:
     // window_start = 15 - 12 = 3
@@ -111,17 +111,17 @@ fn test_rate_limiter_core_precise_window() {
     // Bucket 2: start_tick=6 ≥ 3 → in window (15 tokens)
     // Bucket 3: start_tick=9 ≥ 3 → in window (15 tokens)
     // Total used = 0 + 0 + 15 + 15 = 30, remaining = 60 - 30 = 30
-    assert_eq!(limiter.capacity_remaining(15), 30);
+    assert_eq!(limiter.capacity_remaining_or_0(15), 30);
 }
 #[test]
 fn test_rate_limiter_core_time_consistency() {
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(100, 5, 4);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(100, 5, 4);
     
     // Establish time at tick 20
     assert_eq!(limiter.try_acquire_at(20, 20), Ok(()));
     
     // Going backwards should fail
-    let result: SimpleAcquireResult = limiter.try_acquire_at(15, 10);
+    let result: SimpleRateLimitResult = limiter.try_acquire_at(15, 10);
     assert_eq!(result, Err(SimpleRateLimitError::ExpiredTick));
     
     // Current time ok
@@ -130,7 +130,7 @@ fn test_rate_limiter_core_time_consistency() {
 
 #[test]
 fn test_rate_limiter_core_zero_operations() {
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(100, 10, 5);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(100, 10, 5);
     
     // Zero token requests always succeed
     assert_eq!(limiter.try_acquire_at(0, 0), Ok(()));
@@ -138,24 +138,24 @@ fn test_rate_limiter_core_zero_operations() {
     assert_eq!(limiter.try_acquire_at(100, 0), Ok(()));
     
     // Capacity unchanged
-    assert_eq!(limiter.capacity_remaining(100), 100);
+    assert_eq!(limiter.capacity_remaining_or_0(100), 100);
 }
 
 #[test]
 fn test_rate_limiter_core_single_bucket_config() {
     // Single bucket behaves like fixed window
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(50, 10, 1);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(50, 10, 1);
     
     // Fill the bucket
     assert_eq!(limiter.try_acquire_at(5, 50), Ok(()));
-    assert_eq!(limiter.capacity_remaining(8), 0);
+    assert_eq!(limiter.capacity_remaining_or_0(8), 0);
     
     // New cycle at tick 10, old bucket expires
-    assert_eq!(limiter.capacity_remaining(15), 50);
+    assert_eq!(limiter.capacity_remaining_or_0(15), 50);
     assert_eq!(limiter.try_acquire_at(18, 30), Ok(()));
     
     // Another cycle at tick 20
-    assert_eq!(limiter.capacity_remaining(25), 50);
+    assert_eq!(limiter.capacity_remaining_or_0(25), 50);
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn test_rate_limiter_core_concurrent_buckets() {
     use std::thread;
     
     let counter = Arc::new(SlidingWindowCounterCore::new(100, 5, 4));
-    let limiter: Arc<dyn RateLimiterCore> = counter;
+    let limiter: Arc<dyn RateLimitCore> = counter;
     
     let mut handles = vec![];
     
@@ -197,36 +197,36 @@ fn test_rate_limiter_core_bucket_granularity() {
     ];
     
     for (capacity, bucket_ticks, bucket_count) in configs {
-        let limiter: Box<dyn RateLimiterCore> = 
+        let limiter: Box<dyn RateLimitCore> = 
             create_sliding_window_limiter(capacity, bucket_ticks, bucket_count);
         
         let window_size = bucket_ticks * bucket_count;
         
         // All start with full capacity
-        assert_eq!(limiter.capacity_remaining(0), capacity);
+        assert_eq!(limiter.capacity_remaining_or_0(0), capacity);
         
         // Use half capacity
         assert_eq!(limiter.try_acquire_at(0, capacity / 2), Ok(()));
         
         // Jump past window - should have full capacity again
-        assert_eq!(limiter.capacity_remaining(window_size + 1), capacity);
+        assert_eq!(limiter.capacity_remaining_or_0(window_size + 1), capacity);
     }
 }
 
 #[test]
 fn test_rate_limiter_core_interface_consistency() {
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(90, 6, 3);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(90, 6, 3);
     
     // Use tokens across window
     assert_eq!(limiter.try_acquire_at(2, 20), Ok(()));   // bucket 0
     assert_eq!(limiter.try_acquire_at(8, 30), Ok(()));   // bucket 1
     assert_eq!(limiter.try_acquire_at(14, 25), Ok(()));  // bucket 2
     
-    assert_eq!(limiter.capacity_remaining(14), 15); // 90 - 75 = 15
+    assert_eq!(limiter.capacity_remaining_or_0(14), 15); // 90 - 75 = 15
     
     // Use exact remaining
     assert_eq!(limiter.try_acquire_at(14, 15), Ok(()));
-    assert_eq!(limiter.capacity_remaining(14), 0);
+    assert_eq!(limiter.capacity_remaining_or_0(14), 0);
     
     // Verify exhausted
     assert_eq!(limiter.try_acquire_at(14, 1), Err(SimpleRateLimitError::InsufficientCapacity));
@@ -234,7 +234,7 @@ fn test_rate_limiter_core_interface_consistency() {
 
 #[test]
 fn test_rate_limiter_core_as_trait_object() {
-    let limiter: Box<dyn RateLimiterCore> = Box::new(SlidingWindowCounterCore::new(100, 4, 5));
+    let limiter: Box<dyn RateLimitCore> = Box::new(SlidingWindowCounterCore::new(100, 4, 5));
     
     // Window size = 20 ticks
     // Fill buckets gradually
@@ -245,13 +245,13 @@ fn test_rate_limiter_core_as_trait_object() {
     
     // At tick 19: window_start = 19 - 20 = -1 (saturates to 0)
     // All buckets in window
-    assert_eq!(limiter.capacity_remaining(19), 0);
+    assert_eq!(limiter.capacity_remaining_or_0(19), 0);
     
     // At tick 21: window_start = 21 - 20 = 1
     // All buckets still in window (all start_ticks >= 1)
     // Wait, bucket 0 starts at tick 0 (for tick 1), so start_tick=0 < 1
     // So bucket 0 is NOT in window
-    assert_eq!(limiter.capacity_remaining(21), 20);
+    assert_eq!(limiter.capacity_remaining_or_0(21), 20);
     
     // At tick 24: window_start = 24 - 20 = 4
     // - Bucket 0 [0-3]: 20@1
@@ -263,12 +263,12 @@ fn test_rate_limiter_core_as_trait_object() {
     // - Bucket 1 [24-27]: 0
     // Total = 20 + 20 + 20 = 60, remaining = 100 - 60 = 40
     // The rest are in window
-    assert_eq!(limiter.capacity_remaining(24), 40);
+    assert_eq!(limiter.capacity_remaining_or_0(24), 40);
 }
 
 #[test]
 fn test_rate_limiter_core_polymorphic_comparison() {
-    let limiters: Vec<(Box<dyn RateLimiterCore>, &str)> = vec![
+    let limiters: Vec<(Box<dyn RateLimitCore>, &str)> = vec![
         (create_sliding_window_limiter(100, 1, 60), "fine-grained"),
         (create_sliding_window_limiter(100, 10, 6), "balanced"),
         (create_sliding_window_limiter(100, 60, 1), "coarse"),
@@ -276,7 +276,7 @@ fn test_rate_limiter_core_polymorphic_comparison() {
     
     for (limiter, config) in limiters.iter() {
         assert_eq!(
-            limiter.capacity_remaining(0), 
+            limiter.capacity_remaining_or_0(0), 
             100,
             "Config '{}' should start at full capacity",
             config
@@ -291,7 +291,7 @@ fn test_rate_limiter_core_polymorphic_comparison() {
         );
         
         assert_eq!(
-            limiter.capacity_remaining(0),
+            limiter.capacity_remaining_or_0(0),
             50,
             "Config '{}' should track usage correctly",
             config
@@ -303,17 +303,17 @@ fn test_rate_limiter_core_polymorphic_comparison() {
 fn test_rate_limiter_core_trait_bounds() {
     // Verify Send + Sync
     fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<Box<dyn RateLimiterCore>>();
+    assert_send_sync::<Box<dyn RateLimitCore>>();
     assert_send_sync::<SlidingWindowCounterCore>();
     
     // Shareable across threads
-    let _shared: Arc<dyn RateLimiterCore> = 
+    let _shared: Arc<dyn RateLimitCore> = 
         Arc::new(SlidingWindowCounterCore::new(100, 5, 4));
 }
 
 #[test]
 fn test_rate_limiter_core_edge_cases() {
-    let limiter: Box<dyn RateLimiterCore> = create_sliding_window_limiter(100, 7, 3);
+    let limiter: Box<dyn RateLimitCore> = create_sliding_window_limiter(100, 7, 3);
     
     // Window = 21 ticks
     // Spread across buckets
@@ -326,7 +326,7 @@ fn test_rate_limiter_core_edge_cases() {
     // - Bucket 1 [7-13]: start_tick=7 >= 1 ✓
     // - Bucket 2 [14-20]: start_tick=14 >= 1 ✓
     // Total = 60, remaining = 100 - 60 = 40
-    assert_eq!(limiter.capacity_remaining(22), 40);
+    assert_eq!(limiter.capacity_remaining_or_0(22), 40);
     
     // At tick 28: window_start = 28 - 21 = 7
     // - Bucket 0 [0-6]: 30@3
@@ -335,5 +335,5 @@ fn test_rate_limiter_core_edge_cases() {
     // - Bucket 0 [21-27]: 0
     // - Bucket 1 [28-34]: 0
     // Total = 30, remaining = 70
-    assert_eq!(limiter.capacity_remaining(28), 70);
+    assert_eq!(limiter.capacity_remaining_or_0(28), 70);
 }
