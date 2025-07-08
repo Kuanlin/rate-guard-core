@@ -1,3 +1,12 @@
+## [0.5.2] - 2025-07-08
+
+### Fixed
+
+- Updated crate version to `0.5.2` to reflect prior documentation changes published under `v0.5.1`
+
+> No code or API changes included in this release.
+
+
 ## [0.5.1] - 2025-07-08
 
 ### Fixed
