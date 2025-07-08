@@ -1,3 +1,10 @@
+## [0.5.1] - 2025-07-08
+
+### Fixed
+
+- Corrected `README.md` examples to use `cores::` instead of the outdated `rate_limiters::` path
+
+
 ## [0.5.0] - 2025-07-08
 
 ### Changed
