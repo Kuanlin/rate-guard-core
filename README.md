@@ -53,7 +53,7 @@ rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v
 Perfect for APIs that allow occasional bursts while maintaining average rate:
 
 ```rust
-use rate_guard_core::rate_limiters::{TokenBucketCore, TokenBucketCoreConfig};
+use rate_guard_core::cores::{TokenBucketCore, TokenBucketCoreConfig};
 
 let config = TokenBucketCoreConfig {
     capacity: 100,
@@ -74,7 +74,7 @@ let limiter_alt = TokenBucketCore::from(config);
 Great for maintaining steady traffic flow:
 
 ```rust
-use rate_guard_core::rate_limiters::{LeakyBucketCore, LeakyBucketCoreConfig};
+use rate_guard_core::cores::{LeakyBucketCore, LeakyBucketCoreConfig};
 
 let config = LeakyBucketCoreConfig {
     capacity: 50,
@@ -94,7 +94,7 @@ let limiter_alt = LeakyBucketCore::from(config);
 ### Fixed Window Counter
 
 ```rust
-use rate_guard_core::rate_limiters::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
+use rate_guard_core::cores::{FixedWindowCounterCore, FixedWindowCounterCoreConfig};
 
 let config = FixedWindowCounterCoreConfig {
     capacity: 100,
@@ -113,7 +113,7 @@ let limiter_alt = FixedWindowCounterCore::from(config);
 ### Sliding Window Counter
 
 ```rust
-use rate_guard_core::rate_limiters::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
+use rate_guard_core::cores::{SlidingWindowCounterCore, SlidingWindowCounterCoreConfig};
 
 let config = SlidingWindowCounterCoreConfig {
     capacity: 100,
@@ -137,7 +137,7 @@ Formula:
 `Used = (1 - X%) * lastWindow + currentWindow` where X is the proportion of request time within the current window.
 
 ```rust
-use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
 
 let config = ApproximateSlidingWindowCoreConfig {
     capacity: 100,
@@ -164,7 +164,7 @@ Formula:
 `Used = (1 - X%) * lastWindow + currentWindow` where X is the proportion of request time within the current window.
 
 ```rust
-use rate_guard_core::rate_limiters::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
+use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
 
 let config = ApproximateSlidingWindowCoreConfig {
     capacity: 100,
@@ -246,7 +246,7 @@ let tick = my_monotonic_timer.elapsed_ticks();
 ```Rust
 use std::sync::Arc;
 use std::thread;
-use rate_guard_core::rate_limiters::TokenBucketCore;
+use rate_guard_core::cores::TokenBucketCore;
 let limiter = Arc::new(TokenBucketCore::new(100, 1, 10));
 for _ in 0..10 {
     let limiter = limiter.clone();
