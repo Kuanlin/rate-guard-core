@@ -22,14 +22,14 @@
  Add to your `Cargo.toml`:
  ```toml
  [dependencies]
- rate-guard-core = { version = "0.6.1" }
+ rate-guard-core = { version = "0.7.0" }
  ```
  
  ### from Github
  Add to your `Cargo.toml`:
  ```toml
  [dependencies]
- rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.6.1" }
+ rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.7.0" }
  ```
  
  ---
@@ -41,13 +41,13 @@
  ### from crate.io
  ```toml
  [dependencies]
- rate-guard-core = { version = "0.6.1", default-features = false, features = ["tick_u128"] }
+ rate-guard-core = { version = "0.7.0", default-features = false, features = ["tick-u128"] }
  ```
  
  ### from Github
  ```toml
  [dependencies]
- rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.6.1", default-features = false, features = ["tick_u128"] }
+ rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.7.0", default-features = false, features = ["tick-u128"] }
  ```
  
  ---

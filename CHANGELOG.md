@@ -1,18 +1,29 @@
-## [0.6.1] - 2025-07-11
-
-### Fixed
-
-Removed Chinese comment from lib.rs for better code consistency
-Fixed Uint type imports in test files (fixed_window_counter_core3.rs, sliding_window_counter_core3.rs, token_bucket_core3.rs)
-Updated test helper functions to use Uint type instead of hardcoded u64 for better type flexibility
-Improved type compatibility when using different tick precision features
+## [0.7.0] - 2025-07-11
 
 ### Changed
 
-Enhanced code consistency across test files
-Better support for both u64 and u128 tick precision in tests
+- **BREAKING**: Renamed feature flags to use hyphen format instead of underscore:
+  - `tick_u64` → `tick-u64` (default feature)
+  - `tick_u128` → `tick-u128`
+- Updated all documentation and examples to reflect new feature names
+- Updated compile error messages to reference new feature names
+- Enhanced code consistency across test files
+- Better support for both `u64` and `u128` tick precision in tests
 
-> This is a patch release that fixes minor issues without breaking changes.
+### Fixed
+
+- Fixed `Uint` type imports in test files:
+  - `fixed_window_counter_core3.rs`
+  - `sliding_window_counter_core3.rs`
+  - `token_bucket_core3.rs`
+- Updated test helper functions to use `Uint` type instead of hardcoded `u64` for better type flexibility
+- Improved type compatibility when using different tick precision features
+
+### Migration
+
+Users must update their `Cargo.toml` feature specifications:
+- Replace `features = ["tick_u64"]` with `features = ["tick-u64"]`
+- Replace `features = ["tick_u128"]` with `features = ["tick-u128"]`
 
 
 ## [0.6.0] - 2025-07-11
