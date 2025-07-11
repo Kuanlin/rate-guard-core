@@ -1,5 +1,10 @@
  # `rate-guard-core`
  A comprehensive rate limiting library for Rust applications with multiple thread-safe algorithms.
+
+ [![Crates.io](https://img.shields.io/crates/v/rate-guard-core.svg)](https://crates.io/crates/rate-guard-core)
+ [![Documentation](https://docs.rs/rate-guard-core/badge.svg)](https://docs.rs/rate-guard-core)
+ [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+ [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
  
  ## Features
  **4 Rate Limiting Algorithms**: Token Bucket, Fixed Window Counter, Sliding Window Counter, and Approximate Sliding Window  
