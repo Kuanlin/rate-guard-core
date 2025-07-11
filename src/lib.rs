@@ -2,10 +2,10 @@
 //! A comprehensive rate limiting library for Rust applications with multiple thread-safe algorithms.
 //!
 //! ## Features
-//! - **5 Rate Limiting Algorithms**: Token Bucket, Leaky Bucket, Fixed Window Counter, Sliding Window Counter, and Approximate Sliding Window  
+//! - **4 Rate Limiting Algorithms**: Token Bucket, Fixed Window Counter, Sliding Window Counter, and Approximate Sliding Window  
 //! - **Thread-Safe**: All algorithms use non-blocking locks  
 //! - **Zero Dependencies**: Lightweight with no external dependencies  
-//! - **Flexible Time**: Works with any time unit via abstract “ticks”  
+//! - **Flexible Time**: Works with any time unit via abstract "ticks"  
 //! - **Configurable Tick Precision**: Compile-time feature flags allow choosing `u64` (default) or `u128` for tick units  
 //! - **Rust 1.60+**: Compatible with older Rust versions  
 //!
@@ -17,14 +17,14 @@
 //! Add to your `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { version = "0.5.2" }
+//! rate-guard-core = { version = "0.6.0" }
 //! ```
 //!
 //! ### from Github
 //! Add to your `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.2" }
+//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.6.0" }
 //! ```
 //!
 //! ---
@@ -36,13 +36,13 @@
 //! ### from crate.io
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { version = "0.5.2", default-features = false, features = ["tick_u128"] }
+//! rate-guard-core = { version = "0.6.0", default-features = false, features = ["tick_u128"] }
 //! ```
 //!
 //! ### from Github
 //! ```toml
 //! [dependencies]
-//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.5.2", default-features = false, features = ["tick_u128"] }
+//! rate-guard-core = { git = "https://github.com/Kuanlin/rate-guard-core", tag = "v0.6.0", default-features = false, features = ["tick_u128"] }
 //! ```
 //!
 //! ---
@@ -62,24 +62,6 @@
 //! };
 //!
 //! let limiter: TokenBucketCore = config.into();
-//!
-//! ```
-//!
-//! ---
-//!
-//! ### Leaky Bucket  
-//! Great for maintaining steady traffic flow:
-//!
-//! ```rust
-//! use rate_guard_core::cores::{LeakyBucketCore, LeakyBucketCoreConfig};
-//!
-//! let config = LeakyBucketCoreConfig {
-//!     capacity: 50,
-//!     leak_interval: 10,
-//!     leak_amount: 5,
-//! };
-//!
-//! let limiter: LeakyBucketCore = config.into();
 //!
 //! ```
 //!
@@ -139,23 +121,6 @@
 //!
 //! ---
 //!
-//! ### Approximate Sliding Window  
-//! A memory-optimized version of sliding window counter.  
-//! Formula:  
-//! `Used = (1 - X%) * lastWindow + currentWindow` where X is the proportion of request time within the current window.
-//!
-//! ```rust
-//! use rate_guard_core::cores::{ApproximateSlidingWindowCore, ApproximateSlidingWindowCoreConfig};
-//!
-//! let config = ApproximateSlidingWindowCoreConfig {
-//!     capacity: 100,
-//!     window_ticks: 60,
-//! };
-//! let limiter: ApproximateSlidingWindowCore = ApproximateSlidingWindowCore::from(config);
-//! ```
-//!
-//! ---
-//!
 //! ## Error Handling
 //! All limiters' try_acquire_at returns `SimpleRateLimitResult`:
 //! ```Rust
@@ -211,7 +176,7 @@
 //! ---
 //!
 //! ## Time Management
-//! The library uses abstract “ticks” for time. You can map any time source:
+//! The library uses abstract "ticks" for time. You can map any time source:
 //! ```Rust
 //! // Seconds
 //! let tick = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();

@@ -6,7 +6,6 @@
 //!
 //! # Available Algorithms
 //!
-//! - **[`LeakyBucketCore`]** - Smooths traffic by allowing tokens to leak at a constant rate
 //! - **[`TokenBucketCore`]** - Allows bursts up to capacity while maintaining average rate
 //! - **[`FixedWindowCounterCore`]** - Simple window-based counting with reset at boundaries
 //! - **[`SlidingWindowCounterCore`]** - Accurate sliding window using multiple buckets
@@ -16,7 +15,6 @@
 //!
 //! | Algorithm | Memory Usage | Accuracy | Burst Handling | Use Case |
 //! |-----------|-------------|----------|----------------|----------|
-//! | Leaky Bucket | Low | High | Smooth only | Constant rate |
 //! | Token Bucket | Low | High | Allow bursts | Bursty traffic |
 //! | Fixed Window | Low | Medium | Boundary bursts | Simple counting |
 //! | Sliding Window | Medium | High | Smooth bursts | Accurate limiting |
@@ -27,10 +25,6 @@
 //! All cores use internal mutexes and provide thread-safe operations through
 //! the `try_acquire_at` method, which may return `ContentionFailure` if the
 //! lock cannot be acquired immediately.
-
-pub mod leaky_bucket_core;
-pub use leaky_bucket_core::LeakyBucketCore;
-pub use leaky_bucket_core::LeakyBucketCoreConfig;
 
 pub mod token_bucket_core;
 pub use token_bucket_core::TokenBucketCore;

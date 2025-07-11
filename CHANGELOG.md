@@ -1,3 +1,29 @@
+### 4. `CHANGELOG.md` (添加在最前面)
+```markdown
+## [0.6.0] - 2025-07-11
+
+### Removed
+
+ **BREAKING CHANGE**: Removed `LeakyBucketCore` and `LeakyBucketCoreConfig`
+ Removed all leaky bucket related tests and documentation
+ Updated module exports to remove leaky bucket references
+
+### Changed
+
+ Updated documentation to reflect the 4 available algorithms (previously 5)
+ Simplified algorithm comparison table in documentation
+ Updated README examples to focus on the remaining 4 algorithms
+
+### Rationale
+
+ The previous `LeakyBucketCore` implementation was actually a "leaky bucket as meter" variant, which is functionally equivalent to the token bucket algorithm
+ True leaky bucket behavior requires request queuing and background processing, which is beyond the scope of this synchronous rate limiting library
+ This change eliminates confusion and focuses the library on distinct, well-defined rate limiting algorithms
+ Users requiring leaky bucket behavior should implement request queuing at the application layer using the remaining algorithms
+
+> This version introduces breaking changes and increases the major version to `0.6.0` from `0.5.2` per semantic versioning policy.
+
+
 ## [0.5.2] - 2025-07-08
 
 ### Fixed
