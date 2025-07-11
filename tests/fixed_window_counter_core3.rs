@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
+use rate_guard_core::types::Uint;
 use rate_guard_core::{SimpleRateLimitError, SimpleRateLimitResult};
 use rate_guard_core::rate_limit::RateLimitCore;
 use rate_guard_core::cores::FixedWindowCounterCore;
 
 /// Helper function to create a FixedWindowCounterCore as RateLimitCore
-fn create_fixed_window_limiter(capacity: u64, window_ticks: u64) -> Box<dyn RateLimitCore> {
+fn create_fixed_window_limiter(capacity: Uint, window_ticks: Uint) -> Box<dyn RateLimitCore> {
     Box::new(FixedWindowCounterCore::new(capacity, window_ticks))
 }
 

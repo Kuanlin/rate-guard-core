@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
+use rate_guard_core::types::Uint;
 use rate_guard_core::{SimpleRateLimitError, SimpleRateLimitResult};
 use rate_guard_core::rate_limit::RateLimitCore;
 use rate_guard_core::cores::SlidingWindowCounterCore;
 
 /// Helper function to create a SlidingWindowCounterCore as RateLimitCore
-fn create_sliding_window_limiter(capacity: u64, bucket_ticks: u64, bucket_count: u64) -> Box<dyn RateLimitCore> {
+fn create_sliding_window_limiter(capacity: Uint, bucket_ticks: Uint, bucket_count: Uint) -> Box<dyn RateLimitCore> {
     Box::new(SlidingWindowCounterCore::new(capacity, bucket_ticks, bucket_count))
 }
 #[test]

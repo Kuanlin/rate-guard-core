@@ -1,5 +1,20 @@
-### 4. `CHANGELOG.md` (添加在最前面)
-```markdown
+## [0.6.1] - 2025-07-11
+
+### Fixed
+
+Removed Chinese comment from lib.rs for better code consistency
+Fixed Uint type imports in test files (fixed_window_counter_core3.rs, sliding_window_counter_core3.rs, token_bucket_core3.rs)
+Updated test helper functions to use Uint type instead of hardcoded u64 for better type flexibility
+Improved type compatibility when using different tick precision features
+
+### Changed
+
+Enhanced code consistency across test files
+Better support for both u64 and u128 tick precision in tests
+
+> This is a patch release that fixes minor issues without breaking changes.
+
+
 ## [0.6.0] - 2025-07-11
 
 ### Removed

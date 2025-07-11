@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
+use rate_guard_core::types::Uint;
 use rate_guard_core::{SimpleRateLimitError, SimpleRateLimitResult};
 use rate_guard_core::rate_limit::RateLimitCore;
 use rate_guard_core::cores::TokenBucketCore;
 
 /// Helper function to create a TokenBucketCore as RateLimitCore
-fn create_token_bucket_limiter(capacity: u64, refill_interval: u64, refill_amount: u64) -> Box<dyn RateLimitCore> {
+fn create_token_bucket_limiter(capacity: Uint, refill_interval: Uint, refill_amount: Uint) -> Box<dyn RateLimitCore> {
     Box::new(TokenBucketCore::new(capacity, refill_interval, refill_amount))
 }
 
