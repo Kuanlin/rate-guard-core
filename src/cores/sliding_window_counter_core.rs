@@ -194,6 +194,10 @@ impl SlidingWindowCounterCore {
             return Ok(());
         }
         
+        if tokens > self.capacity {
+            return Err(SimpleRateLimitError::BeyondCapacity);
+        }
+
         // Attempt to acquire the lock, return contention error if unavailable
         let mut state = match self.state.try_lock() {
             Ok(guard) => guard,

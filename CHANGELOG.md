@@ -1,3 +1,22 @@
+## [0.7.1] - 2025-07-12
+
+### Fixed
+
+- Fixed missing BeyondCapacity error check in try_acquire_at methods for all algorithms
+- TokenBucketCore::try_acquire_at now returns SimpleRateLimitError::BeyondCapacity when tokens > capacity
+- FixedWindowCounterCore::try_acquire_at now returns SimpleRateLimitError::BeyondCapacity when tokens > capacity
+- SlidingWindowCounterCore::try_acquire_at now returns SimpleRateLimitError::BeyondCapacity when tokens > capacity
+- ApproximateSlidingWindowCore::try_acquire_at now returns SimpleRateLimitError::BeyondCapacity when tokens > capacity
+- Improved API consistency between try_acquire_at and try_acquire_verbose_at methods
+- Fixed semantic correctness: requests that permanently exceed capacity now return BeyondCapacity instead of InsufficientCapacity
+
+### Migration
+
+This is a backward-compatible bug fix. Most applications will not be affected. However:
+- Code that specifically handles SimpleRateLimitError::InsufficientCapacity for over-capacity requests should also handle SimpleRateLimitError::BeyondCapacity
+- Applications expecting InsufficientCapacity for over-capacity requests should update their error handling logic
+
+
 ## [0.7.0] - 2025-07-11
 
 ### Changed
