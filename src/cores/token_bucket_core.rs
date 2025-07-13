@@ -299,14 +299,22 @@ impl TokenBucketCore {
             state.available -= tokens;
             Ok(())
         } else {
-            let needed_tokens = tokens - state.available;
-            let refill_per_tick = self.refill_amount;
-            let retry_after_ticks = self.refill_interval
-                .saturating_mul((needed_tokens + refill_per_tick - 1) / refill_per_tick);
+
+            // Step 3: retry-after estimation
+            let available = state.available;
+            let shortfall = tokens.saturating_sub(available);
+            debug_assert!(shortfall > 0);
+
+            let needed_refills = (shortfall + self.refill_amount - 1) / self.refill_amount; //ceil(shortfall / refill_amount)
+            debug_assert!(needed_refills >= 1);
+
+            let next_refill_tick = state.last_refill_tick + self.refill_interval;
+            let retry_after_ticks =
+                (needed_refills - 1) * self.refill_interval + (next_refill_tick - tick);
 
             Err(VerboseRateLimitError::InsufficientCapacity {
                 acquiring: tokens,
-                available: state.available,
+                available,
                 retry_after_ticks,
             })
         }

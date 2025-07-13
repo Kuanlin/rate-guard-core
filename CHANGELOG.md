@@ -1,3 +1,12 @@
+## [0.7.2] - 2025-07-13
+
+### Fixed
+- Improved precision of `retry_after_ticks` in `TokenBucketCore::try_acquire_verbose_at`
+- Now correctly uses ceil-based refill estimation:
+  `retry_after_ticks = (needed_refills - 1) * refill_interval + (next_refill_tick - current_tick)`
+- Ensures no underflow and accurate retry wait time in `InsufficientCapacity` errors.
+
+
 ## [0.7.1] - 2025-07-12
 
 ### Fixed
